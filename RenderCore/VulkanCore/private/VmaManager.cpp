@@ -28,7 +28,7 @@ void VmaManager::Initialize(vk::Instance instance, vk::PhysicalDevice physicalDe
     s_Initialized = true;
 }
 
-void VmaManager::Cleanup()
+void VmaManager::cleanup()
 {
     if (s_Initialized)
     {
@@ -38,7 +38,7 @@ void VmaManager::Cleanup()
     }
 }
 
-VmaAllocator VmaManager::GetAllocator()
+VmaAllocator VmaManager::getAllocator()
 {
     if (!s_Initialized)
     {

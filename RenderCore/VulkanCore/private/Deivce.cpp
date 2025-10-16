@@ -530,10 +530,10 @@ int Device::ratedevicescore(vk::PhysicalDevice &device)
 
 Device::~Device()
 {
-    Cleanup();
+    cleanup();
 }
 
-void Device::Cleanup()
+void Device::cleanup()
 {
     if (m_graphicsQueue)
     {

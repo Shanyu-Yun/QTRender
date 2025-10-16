@@ -38,13 +38,13 @@ CommandPoolManager::~CommandPoolManager()
     cleanup();
 }
 
-std::shared_ptr<ThreadCommandPool> CommandPoolManager::createThreadCommandPool()
+std::shared_ptr<ThreadCommandPool> CommandPoolManager::createthreadcommandpool()
 {
     vk::CommandPoolCreateInfo poolInfo{};
     poolInfo.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer; // 允许单独重置命令缓冲区
     poolInfo.queueFamilyIndex = m_queueFamilyIndex;
 
-    vk::CommandPool commandPool = m_device.Get().createCommandPool(poolInfo);
+    vk::CommandPool commandPool = m_device.get().createCommandPool(poolInfo);
     if (!commandPool)
     {
         throw std::runtime_error("Failed to create command pool for thread " +
@@ -54,7 +54,7 @@ std::shared_ptr<ThreadCommandPool> CommandPoolManager::createThreadCommandPool()
     return std::make_shared<ThreadCommandPool>(commandPool);
 }
 
-std::shared_ptr<ThreadCommandPool> CommandPoolManager::getOrCreateThreadPool()
+std::shared_ptr<ThreadCommandPool> CommandPoolManager::getorcreatethreadpool()
 {
     // 先检查 thread_local 缓存
     if (t_threadPool)
@@ -76,7 +76,7 @@ std::shared_ptr<ThreadCommandPool> CommandPoolManager::getOrCreateThreadPool()
     }
 
     // 创建新的命令池
-    auto newPool = createThreadCommandPool();
+    auto newPool = createthreadcommandpool();
 
     {
         std::lock_guard<std::mutex> lock(m_mtx);
@@ -89,13 +89,13 @@ std::shared_ptr<ThreadCommandPool> CommandPoolManager::getOrCreateThreadPool()
 
 vk::CommandPool CommandPoolManager::getCommandPool()
 {
-    auto pool = getOrCreateThreadPool();
+    auto pool = getorcreatethreadpool();
     return pool->pool;
 }
 
-vk::CommandBuffer CommandPoolManager::allocateInternal(vk::CommandBufferLevel level)
+vk::CommandBuffer CommandPoolManager::allocateinternal(vk::CommandBufferLevel level)
 {
-    auto threadPool = getOrCreateThreadPool();
+    auto threadPool = getorcreatethreadpool();
 
     // 先尝试从对象池中获取
     auto &freeBuffers =
@@ -117,7 +117,7 @@ vk::CommandBuffer CommandPoolManager::allocateInternal(vk::CommandBufferLevel le
     allocInfo.level = level;
     allocInfo.commandBufferCount = 1;
 
-    std::vector<vk::CommandBuffer> buffers = m_device.Get().allocateCommandBuffers(allocInfo);
+    std::vector<vk::CommandBuffer> buffers = m_device.get().allocateCommandBuffers(allocInfo);
     threadPool->allocatedCount++;
 
     return buffers[0];
@@ -125,17 +125,17 @@ vk::CommandBuffer CommandPoolManager::allocateInternal(vk::CommandBufferLevel le
 
 CommandBufferHandle CommandPoolManager::allocate(vk::CommandBufferLevel level)
 {
-    auto threadPool = getOrCreateThreadPool();
+    auto threadPool = getorcreatethreadpool();
     threadPool->inUseCount++; // 增加使用计数
 
-    vk::CommandBuffer buffer = allocateInternal(level);
+    vk::CommandBuffer buffer = allocateinternal(level);
     vk::CommandBuffer *bufferPtr = new vk::CommandBuffer(buffer);
     return CommandBufferHandle(bufferPtr, CommandBufferDeleter{this, level});
 }
 
 std::vector<CommandBufferHandle> CommandPoolManager::allocateBatch(uint32_t count, vk::CommandBufferLevel level)
 {
-    auto threadPool = getOrCreateThreadPool();
+    auto threadPool = getorcreatethreadpool();
     threadPool->inUseCount += count; // 增加使用计数
 
     std::vector<CommandBufferHandle> handles;
@@ -166,7 +166,7 @@ std::vector<CommandBufferHandle> CommandPoolManager::allocateBatch(uint32_t coun
         allocInfo.level = level;
         allocInfo.commandBufferCount = needAllocate;
 
-        std::vector<vk::CommandBuffer> newBuffers = m_device.Get().allocateCommandBuffers(allocInfo);
+        std::vector<vk::CommandBuffer> newBuffers = m_device.get().allocateCommandBuffers(allocInfo);
 
         for (auto buffer : newBuffers)
         {
@@ -290,7 +290,7 @@ void CommandPoolManager::resetCommandPool(std::thread::id threadId)
         }
 
         // 重置命令池（会释放所有命令缓冲区）
-        m_device.Get().resetCommandPool(threadPool->pool, vk::CommandPoolResetFlags{});
+        m_device.get().resetCommandPool(threadPool->pool, vk::CommandPoolResetFlags{});
         threadPool->allocatedCount = 0;
     }
 }
@@ -313,7 +313,7 @@ void CommandPoolManager::cleanup()
 
         if (threadPool && threadPool->pool)
         {
-            m_device.Get().destroyCommandPool(threadPool->pool);
+            m_device.get().destroyCommandPool(threadPool->pool);
         }
     }
 

@@ -82,9 +82,9 @@ class Device
 
     /**
      * @brief 返回逻辑设备句柄。
-     * @return vk::Device 当前逻辑设备句柄。调用前请确保设备已初始化且未被 Cleanup() 释放。
+     * @return vk::Device 当前逻辑设备句柄。调用前请确保设备已初始化且未被 cleanup() 释放。
      */
-    inline vk::Device Get() const
+    inline vk::Device get() const
     {
         return m_device;
     }
@@ -93,7 +93,7 @@ class Device
      * @brief 返回已选择的物理设备。
      * @return vk::PhysicalDevice 当前物理设备句柄。
      */
-    inline vk::PhysicalDevice GetPhysicalDevice() const
+    inline vk::PhysicalDevice getPhysicalDevice() const
     {
         return m_physicalDevice;
     }
@@ -102,7 +102,7 @@ class Device
      * @brief 返回 Vulkan 实例的引用。
      * @return vk::Instance& Vulkan 实例引用。
      */
-    inline vk::Instance &GetInstance() const
+    inline vk::Instance &getInstance() const
     {
         return m_instance;
     }
@@ -111,7 +111,7 @@ class Device
      * @brief 返回图形队列句柄。
      * @return vk::Queue 图形队列。
      */
-    inline vk::Queue GetGraphicsQueue() const
+    inline vk::Queue getGraphicsQueue() const
     {
         return m_graphicsQueue;
     }
@@ -120,7 +120,7 @@ class Device
      * @brief 返回呈现队列句柄。
      * @return vk::Queue 呈现队列。
      */
-    inline vk::Queue GetPresentQueue() const
+    inline vk::Queue getPresentQueue() const
     {
         return m_presentQueue;
     }
@@ -129,7 +129,7 @@ class Device
      * @brief 返回图形队列族索引信息。
      * @return QueueFamilyIndices 队列族索引结构体。
      */
-    inline uint32_t GetGraphicsQueueFamilyIndices() const
+    inline uint32_t getGraphicsQueueFamilyIndices() const
     {
         return m_queueFamilyIndices.graphicsFamily.value();
     }
@@ -138,7 +138,7 @@ class Device
      * @brief 返回呈现队列族索引信息。
      * @return QueueFamilyIndices 队列族索引结构体。
      */
-    inline uint32_t GetPresentQueueFamilyIndices() const
+    inline uint32_t getPresentQueueFamilyIndices() const
     {
         return m_queueFamilyIndices.presentFamily.value();
     }
@@ -148,7 +148,7 @@ class Device
      *
      * 在析构前或显式需要时调用。
      */
-    void Cleanup();
+    void cleanup();
 
   private:
     /**

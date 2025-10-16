@@ -11,9 +11,9 @@ class VmaManager
 {
   public:
     static void Initialize(vk::Instance instance, vk::PhysicalDevice physicalDevice, vk::Device device);
-    static void Cleanup();
+    static void cleanup();
 
-    static VmaAllocator GetAllocator();
+    static VmaAllocator getAllocator();
 
   private:
     static VmaAllocator s_Allocator;

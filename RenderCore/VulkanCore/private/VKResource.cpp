@@ -3,13 +3,12 @@
 namespace vkcore
 {
 
-GpuResource::GpuResource(std::string name, vk::Device device)
-    : m_name("Unnamed Resource"), m_device(*(vk::Device *)nullptr)
+GpuResource::GpuResource(std::string name, vk::Device device) : m_name(name), m_device(device)
 {
 }
 
 Buffer::Buffer(std::string name, Device &device, VmaAllocator allocator, const BufferDesc &desc)
-    : GpuResource(name, device.Get()), m_allocator(allocator), m_size(desc.size)
+    : GpuResource(name, device.get()), m_allocator(allocator), m_size(desc.size)
 {
     VkBufferCreateInfo bufferInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
     bufferInfo.size = desc.size;
@@ -23,7 +22,12 @@ Buffer::Buffer(std::string name, Device &device, VmaAllocator allocator, const B
     VkBuffer rawBuffer = VK_NULL_HANDLE;
     VmaAllocationInfo allocationDetails;
 
-    vmaCreateBuffer(m_allocator, &bufferInfo, &allocInfo, &rawBuffer, &m_allocation, &allocationDetails);
+    VkResult result =
+        vmaCreateBuffer(m_allocator, &bufferInfo, &allocInfo, &rawBuffer, &m_allocation, &allocationDetails);
+    if (result != VK_SUCCESS)
+    {
+        throw std::runtime_error("Failed to create buffer: " + std::to_string(result));
+    }
 
     m_buffer = vk::Buffer(rawBuffer);
     if (allocInfo.flags & VMA_ALLOCATION_CREATE_MAPPED_BIT)
@@ -37,7 +41,7 @@ Buffer::~Buffer()
     release();
 }
 
-vk::DeviceAddress Buffer::GetDeviceAddress() const
+vk::DeviceAddress Buffer::getDeviceAddress() const
 {
     if (!m_buffer)
         throw std::runtime_error("Buffer is not created.");
@@ -61,7 +65,7 @@ void *Buffer::map()
     return m_mappedData;
 }
 
-void Buffer::unmap()
+void Buffer::ummap()
 {
     if (m_mappedData)
     {
@@ -82,7 +86,7 @@ void Buffer::write(const void *data, vk::DeviceSize size, vk::DeviceSize offset)
         throw std::runtime_error("Failed to map buffer memory.");
 
     std::memcpy(static_cast<uint8_t *>(mapped) + offset, data, size);
-    unmap();
+    ummap();
 }
 
 void Buffer::flush(vk::DeviceSize size, vk::DeviceSize offset)
@@ -99,7 +103,7 @@ void Buffer::release()
 {
     if (m_buffer)
     {
-        vmaDestroyBuffer(m_allocator, m_buffer, m_allocation);
+        vmaDestroyBuffer(m_allocator, static_cast<VkBuffer>(m_buffer), m_allocation);
         m_buffer = nullptr;
         m_allocation = nullptr;
         m_mappedData = nullptr;
@@ -108,7 +112,7 @@ void Buffer::release()
 }
 
 Image::Image(std::string name, Device &device, VmaAllocator allocator, const ImageDesc &desc)
-    : GpuResource("Unnamed Image", device.Get()), m_allocator(allocator), m_format(desc.format), m_extent(desc.extent),
+    : GpuResource("Unnamed Image", device.get()), m_allocator(allocator), m_format(desc.format), m_extent(desc.extent),
       m_mipLevels(desc.mipLevels), m_currentLayout(vk::ImageLayout::eUndefined)
 {
     VkImageCreateInfo imageInfo = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
@@ -130,7 +134,11 @@ Image::Image(std::string name, Device &device, VmaAllocator allocator, const Ima
     VkImage rawImage = VK_NULL_HANDLE;
     VmaAllocationInfo allocationDetails;
 
-    vmaCreateImage(m_allocator, &imageInfo, &allocInfo, &rawImage, &m_allocation, &allocationDetails);
+    VkResult result = vmaCreateImage(m_allocator, &imageInfo, &allocInfo, &rawImage, &m_allocation, &allocationDetails);
+    if (result != VK_SUCCESS)
+    {
+        throw std::runtime_error("Failed to create image: " + std::to_string(result));
+    }
 
     m_image = vk::Image(rawImage);
 
@@ -139,12 +147,31 @@ Image::Image(std::string name, Device &device, VmaAllocator allocator, const Ima
     viewInfo.image = m_image;
     viewInfo.viewType = (desc.arrayLayers == 1) ? vk::ImageViewType::e2D : vk::ImageViewType::e2DArray;
     viewInfo.format = desc.format;
-    viewInfo.subresourceRange.aspectMask = (desc.usage & vk::ImageUsageFlagBits::eDepthStencilAttachment)
-                                               ? vk::ImageAspectFlagBits::eDepth
-                                               : vk::ImageAspectFlagBits::eColor;
+
+    // 根据格式判断 AspectMask
+    vk::ImageAspectFlags aspectMask = vk::ImageAspectFlagBits::eColor;
+    if (desc.usage & vk::ImageUsageFlagBits::eDepthStencilAttachment)
+    {
+        // 根据格式判断是否包含 Stencil
+        if (desc.format == vk::Format::eD32SfloatS8Uint || desc.format == vk::Format::eD24UnormS8Uint ||
+            desc.format == vk::Format::eD16UnormS8Uint)
+        {
+            aspectMask = vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
+        }
+        else
+        {
+            aspectMask = vk::ImageAspectFlagBits::eDepth;
+        }
+    }
+
+    viewInfo.subresourceRange.aspectMask = aspectMask;
     viewInfo.subresourceRange.baseMipLevel = 0;
     viewInfo.subresourceRange.levelCount = desc.mipLevels;
     viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = desc.arrayLayers;
+
+    // 实际创建 ImageView
+    m_imageView = m_device.createImageView(viewInfo);
 }
 
 Image::~Image()
@@ -161,7 +188,7 @@ void Image::release()
     }
     if (m_image)
     {
-        vmaDestroyImage(m_allocator, m_image, m_allocation);
+        vmaDestroyImage(m_allocator, static_cast<VkImage>(m_image), m_allocation);
         m_image = nullptr;
         m_allocation = nullptr;
         m_format = vk::Format::eUndefined;

@@ -51,9 +51,9 @@ find_package(VulkanMemoryAllocator CONFIG REQUIRED)
 add_library(RenderCore::VulkanCore ALIAS VulkanCore)
 
 
-target_link_libraries(VulkanCore PRIVATE
-    VulkanMemoryAllocator
+target_link_libraries(VulkanCore PUBLIC
     Vulkan::Vulkan
     glm::glm
+    GPUOpen::VulkanMemoryAllocator
 )
 

@@ -31,7 +31,7 @@ class GpuResource
      * @brief 获取资源的调试名称
      * @return const std::string& 资源名称的常引用
      */
-    inline const std::string &GetName() const
+    inline const std::string &getName() const
     {
         return m_name;
     }
@@ -41,14 +41,14 @@ class GpuResource
      * @param name 新的资源名称
      * @details 设置后可用于 RenderDoc、Nsight 等调试工具中识别资源
      */
-    void SetName(const std::string &name)
+    void setName(const std::string &name)
     {
         m_name = name;
     }
 
   protected:
-    std::string m_name;   ///< 资源调试名称
-    vk::Device &m_device; ///< Device 引用（不拥有，需确保生命周期）
+    std::string m_name;  ///< 资源调试名称
+    vk::Device m_device; ///< Device 句柄
 };
 
 /**
@@ -112,7 +112,7 @@ class Buffer : public GpuResource
      * @brief 获取底层 Vulkan Buffer 句柄
      * @return vk::Buffer Vulkan Buffer 句柄
      */
-    vk::Buffer Get() const
+    vk::Buffer get() const
     {
         return m_buffer;
     }
@@ -121,7 +121,7 @@ class Buffer : public GpuResource
      * @brief 获取 Buffer 大小
      * @return vk::DeviceSize Buffer 的字节大小
      */
-    vk::DeviceSize GetSize() const
+    vk::DeviceSize getSize() const
     {
         return m_size;
     }
@@ -132,7 +132,7 @@ class Buffer : public GpuResource
      * @details 用于 GPU 端的缓冲区访问（如光线追踪、间接绘制等）
      * @note 需要 Buffer 创建时包含 eShaderDeviceAddress 用途标志
      */
-    vk::DeviceAddress GetDeviceAddress() const;
+    vk::DeviceAddress getDeviceAddress() const;
 
     /**
      * @brief 映射 Buffer 内存到 CPU 地址空间
@@ -146,7 +146,7 @@ class Buffer : public GpuResource
      * @brief 解除 Buffer 内存映射
      * @note 必须在 map() 之后调用
      */
-    void unmap();
+    void ummap();
 
     /**
      * @brief 写入数据到 Buffer
@@ -214,7 +214,7 @@ class Image : public GpuResource
      * @brief 获取底层 Vulkan Image 句柄
      * @return vk::Image Vulkan Image 句柄
      */
-    inline vk::Image Get() const
+    inline vk::Image get() const
     {
         return m_image;
     }
@@ -224,7 +224,7 @@ class Image : public GpuResource
      * @return vk::ImageView 默认创建的 ImageView 句柄
      * @details ImageView 在构造时自动创建，包含所有 mip 级别和数组层
      */
-    inline vk::ImageView GetView() const
+    inline vk::ImageView getView() const
     {
         return m_imageView;
     }
@@ -233,7 +233,7 @@ class Image : public GpuResource
      * @brief 获取 Image 格式
      * @return vk::Format Image 的像素格式
      */
-    inline vk::Format GetFormat() const
+    inline vk::Format getFormat() const
     {
         return m_format;
     }
@@ -242,7 +242,7 @@ class Image : public GpuResource
      * @brief 获取 Image 尺寸
      * @return vk::Extent3D Image 的三维尺寸（宽x高x深度）
      */
-    inline vk::Extent3D GetExtent() const
+    inline vk::Extent3D getExtent() const
     {
         return m_extent;
     }
@@ -251,7 +251,7 @@ class Image : public GpuResource
      * @brief 获取 MIP 级别数量
      * @return uint32_t MIP 级别数量
      */
-    inline uint32_t GetMipLevels() const
+    inline uint32_t getMipLevels() const
     {
         return m_mipLevels;
     }
@@ -261,7 +261,7 @@ class Image : public GpuResource
      * @return vk::ImageLayout 当前的图像布局
      * @details 用于确定是否需要进行布局转换
      */
-    inline vk::ImageLayout GetCurrentLayout() const
+    inline vk::ImageLayout getCurrentLayout() const
     {
         return m_currentLayout;
     }

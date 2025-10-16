@@ -155,17 +155,17 @@ class CommandPoolManager
      * @brief 为当前线程创建命令池
      * @return std::shared_ptr<ThreadCommandPool> 新创建的线程命令池
      */
-    std::shared_ptr<ThreadCommandPool> createThreadCommandPool();
+    std::shared_ptr<ThreadCommandPool> createthreadcommandpool();
 
     /**
      * @brief 获取或创建当前线程的命令池
      */
-    std::shared_ptr<ThreadCommandPool> getOrCreateThreadPool();
+    std::shared_ptr<ThreadCommandPool> getorcreatethreadpool();
 
     /**
      * @brief 内部实现：从对象池或新分配获取命令缓冲区
      */
-    vk::CommandBuffer allocateInternal(vk::CommandBufferLevel level);
+    vk::CommandBuffer allocateinternal(vk::CommandBufferLevel level);
 
     /**
      * @brief 回收命令缓冲区到对象池（由 CommandBufferDeleter 调用）

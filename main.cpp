@@ -46,12 +46,12 @@ int main(int argc, char *argv[])
     deviceConfig.deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     deviceConfig.vulkan1_3_features = {"dynamicRendering"};
     vkcore::Device device(vkInstance, surface, deviceConfig);
-    std::cout << device.GetPhysicalDevice().getProperties().deviceName << std::endl;
+    std::cout << device.getPhysicalDevice().getProperties().deviceName << std::endl;
 
     try
     {
-        vk::Queue graphicsQueue = device.GetGraphicsQueue();
-        uint32_t graphicsQueueFamilyIndex = device.GetGraphicsQueueFamilyIndices();
+        vk::Queue graphicsQueue = device.getGraphicsQueue();
+        uint32_t graphicsQueueFamilyIndex = device.getGraphicsQueueFamilyIndices();
 
         vkcore::CommandPoolManager commandPoolManager(device, graphicsQueueFamilyIndex);
 
@@ -69,7 +69,7 @@ int main(int argc, char *argv[])
     int result = app.exec();
 
     // 清理资源
-    device.Cleanup();
+    device.cleanup();
     delete vulkanInstance;
 
     return result;
@@ -77,7 +77,7 @@ int main(int argc, char *argv[])
 
 void testRecord(vkcore::Device &device, vkcore::CommandPoolManager &commandPoolManager, vk::Queue graphicsQueue)
 {
-    vk::Device vkDevice = device.Get();
+    vk::Device vkDevice = device.get();
 
     // 0. 创建查询池用于时间戳
     vk::QueryPoolCreateInfo queryPoolInfo{};
@@ -112,7 +112,7 @@ void testRecord(vkcore::Device &device, vkcore::CommandPoolManager &commandPoolM
     if (result == vk::Result::eSuccess)
     {
         // 获取时间戳周期（纳秒）
-        vk::PhysicalDeviceProperties props = device.GetPhysicalDevice().getProperties();
+        vk::PhysicalDeviceProperties props = device.getPhysicalDevice().getProperties();
         float timestampPeriod = props.limits.timestampPeriod;
 
         uint64_t startTime = timestamps[0];
