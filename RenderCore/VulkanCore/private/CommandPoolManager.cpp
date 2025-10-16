@@ -1,16 +1,12 @@
 #include "../public/CommandPoolManager.hpp"
 #include <cassert>
+#include <cstdio>
 #include <stdexcept>
+#include <string>
 
 /**
  * @file CommandPoolManager.cpp
  * @brief CommandPoolManager 类的实现文件
- *
- * 新设计核心特性：
- * 1. 对象池模式：复用命令缓冲区，减少分配开销
- * 2. 智能指针管理：自动回收，防止泄漏
- * 3. 状态验证：Debug 模式下检查操作合法性
- * 4. 批量操作：简化提交流程
  */
 
 namespace vkcore
@@ -19,91 +15,15 @@ namespace vkcore
 // thread_local 静态成员定义
 thread_local std::shared_ptr<ThreadCommandPool> CommandPoolManager::t_threadPool = nullptr;
 
-// ==================== CommandBuffer 基类实现 ====================
+// ==================== CommandBufferDeleter 实现 ====================
 
-CommandBuffer::CommandBuffer(vk::CommandBuffer buffer, CommandPoolManager *pool, vk::CommandBufferLevel level)
-    : m_buffer(buffer), m_poolManager(pool), m_level(level), m_state(CommandBufferState::Initial)
+void CommandBufferDeleter::operator()(vk::CommandBuffer *buffer) const
 {
-}
-
-CommandBuffer::~CommandBuffer()
-{
-    // 析构时自动回收到对象池
-    if (m_poolManager && m_buffer)
+    if (pool && buffer && *buffer)
     {
-        m_poolManager->recycleCommandBuffer(m_buffer, m_level);
+        pool->recycle(*buffer, level);
+        delete buffer;
     }
-}
-
-CommandBuffer::CommandBuffer(CommandBuffer &&other) noexcept
-    : m_buffer(other.m_buffer), m_poolManager(other.m_poolManager), m_level(other.m_level), m_state(other.m_state)
-{
-    other.m_buffer = nullptr;
-    other.m_poolManager = nullptr;
-    other.m_state = CommandBufferState::Invalid;
-}
-
-CommandBuffer &CommandBuffer::operator=(CommandBuffer &&other) noexcept
-{
-    if (this != &other)
-    {
-        // 回收当前持有的缓冲区
-        if (m_poolManager && m_buffer)
-        {
-            m_poolManager->recycleCommandBuffer(m_buffer, m_level);
-        }
-
-        m_buffer = other.m_buffer;
-        m_poolManager = other.m_poolManager;
-        m_level = other.m_level;
-        m_state = other.m_state;
-
-        other.m_buffer = nullptr;
-        other.m_poolManager = nullptr;
-        other.m_state = CommandBufferState::Invalid;
-    }
-    return *this;
-}
-
-void CommandBuffer::begin(vk::CommandBufferUsageFlags flags, const vk::CommandBufferInheritanceInfo *inheritanceInfo)
-{
-#ifdef _DEBUG
-    // Debug 模式下验证状态
-    if (m_state == CommandBufferState::Recording)
-    {
-        throw std::runtime_error("CommandBuffer::begin() called while already recording");
-    }
-    if (m_state == CommandBufferState::Pending)
-    {
-        throw std::runtime_error("CommandBuffer::begin() called while pending execution");
-    }
-#endif
-
-    vk::CommandBufferBeginInfo beginInfo{};
-    beginInfo.flags = flags;
-    beginInfo.pInheritanceInfo = inheritanceInfo;
-
-    m_buffer.begin(beginInfo);
-    m_state = CommandBufferState::Recording;
-}
-
-void CommandBuffer::end()
-{
-#ifdef _DEBUG
-    if (m_state != CommandBufferState::Recording)
-    {
-        throw std::runtime_error("CommandBuffer::end() called but not in recording state");
-    }
-#endif
-
-    m_buffer.end();
-    m_state = CommandBufferState::Executable;
-}
-
-void CommandBuffer::reset(vk::CommandBufferResetFlags flags)
-{
-    m_buffer.reset(flags);
-    m_state = CommandBufferState::Initial;
 }
 
 // ==================== CommandPoolManager 实现 ====================
@@ -173,98 +93,103 @@ vk::CommandPool CommandPoolManager::getCommandPool()
     return pool->pool;
 }
 
-std::vector<std::shared_ptr<PrimaryCommandBuffer>> CommandPoolManager::allocatePrimaryCommandBuffers(uint32_t count)
+vk::CommandBuffer CommandPoolManager::allocateInternal(vk::CommandBufferLevel level)
 {
     auto threadPool = getOrCreateThreadPool();
-    std::vector<std::shared_ptr<PrimaryCommandBuffer>> result;
-    result.reserve(count);
 
-    // 先从对象池中获取空闲的命令缓冲区
-    uint32_t reusedCount = 0;
-    while (reusedCount < count && !threadPool->freePrimaryBuffers.empty())
+    // 先尝试从对象池中获取
+    auto &freeBuffers =
+        (level == vk::CommandBufferLevel::ePrimary) ? threadPool->freePrimaryBuffers : threadPool->freeSecondaryBuffers;
+
+    if (!freeBuffers.empty())
     {
-        vk::CommandBuffer buffer = threadPool->freePrimaryBuffers.front();
-        threadPool->freePrimaryBuffers.pop();
+        vk::CommandBuffer buffer = freeBuffers.front();
+        freeBuffers.pop();
 
         // 重置命令缓冲区
         buffer.reset(vk::CommandBufferResetFlags{});
+        return buffer;
+    }
 
-        result.push_back(std::make_shared<PrimaryCommandBuffer>(buffer, this, vk::CommandBufferLevel::ePrimary));
+    // 对象池为空，分配新的
+    vk::CommandBufferAllocateInfo allocInfo{};
+    allocInfo.commandPool = threadPool->pool;
+    allocInfo.level = level;
+    allocInfo.commandBufferCount = 1;
+
+    std::vector<vk::CommandBuffer> buffers = m_device.Get().allocateCommandBuffers(allocInfo);
+    threadPool->allocatedCount++;
+
+    return buffers[0];
+}
+
+CommandBufferHandle CommandPoolManager::allocate(vk::CommandBufferLevel level)
+{
+    auto threadPool = getOrCreateThreadPool();
+    threadPool->inUseCount++; // 增加使用计数
+
+    vk::CommandBuffer buffer = allocateInternal(level);
+    vk::CommandBuffer *bufferPtr = new vk::CommandBuffer(buffer);
+    return CommandBufferHandle(bufferPtr, CommandBufferDeleter{this, level});
+}
+
+std::vector<CommandBufferHandle> CommandPoolManager::allocateBatch(uint32_t count, vk::CommandBufferLevel level)
+{
+    auto threadPool = getOrCreateThreadPool();
+    threadPool->inUseCount += count; // 增加使用计数
+
+    std::vector<CommandBufferHandle> handles;
+    handles.reserve(count);
+
+    auto &freeBuffers =
+        (level == vk::CommandBufferLevel::ePrimary) ? threadPool->freePrimaryBuffers : threadPool->freeSecondaryBuffers;
+
+    // 先从对象池中获取
+    uint32_t reusedCount = 0;
+    while (reusedCount < count && !freeBuffers.empty())
+    {
+        vk::CommandBuffer buffer = freeBuffers.front();
+        freeBuffers.pop();
+        buffer.reset(vk::CommandBufferResetFlags{});
+
+        vk::CommandBuffer *bufferPtr = new vk::CommandBuffer(buffer);
+        handles.emplace_back(bufferPtr, CommandBufferDeleter{this, level});
         reusedCount++;
     }
 
-    // 如果对象池不够，分配新的
+    // 如果对象池不够，批量分配新的
     uint32_t needAllocate = count - reusedCount;
     if (needAllocate > 0)
     {
         vk::CommandBufferAllocateInfo allocInfo{};
         allocInfo.commandPool = threadPool->pool;
-        allocInfo.level = vk::CommandBufferLevel::ePrimary;
+        allocInfo.level = level;
         allocInfo.commandBufferCount = needAllocate;
 
-        std::vector<vk::CommandBuffer> buffers = m_device.Get().allocateCommandBuffers(allocInfo);
+        std::vector<vk::CommandBuffer> newBuffers = m_device.Get().allocateCommandBuffers(allocInfo);
 
-        for (auto &buffer : buffers)
+        for (auto buffer : newBuffers)
         {
-            result.push_back(std::make_shared<PrimaryCommandBuffer>(buffer, this, vk::CommandBufferLevel::ePrimary));
+            vk::CommandBuffer *bufferPtr = new vk::CommandBuffer(buffer);
+            handles.emplace_back(bufferPtr, CommandBufferDeleter{this, level});
         }
 
         threadPool->allocatedCount += needAllocate;
     }
 
-    return result;
+    return handles;
 }
 
-std::vector<std::shared_ptr<SecondaryCommandBuffer>> CommandPoolManager::allocateSecondaryCommandBuffers(uint32_t count)
-{
-    auto threadPool = getOrCreateThreadPool();
-    std::vector<std::shared_ptr<SecondaryCommandBuffer>> result;
-    result.reserve(count);
-
-    // 先从对象池中获取空闲的命令缓冲区
-    uint32_t reusedCount = 0;
-    while (reusedCount < count && !threadPool->freeSecondaryBuffers.empty())
-    {
-        vk::CommandBuffer buffer = threadPool->freeSecondaryBuffers.front();
-        threadPool->freeSecondaryBuffers.pop();
-
-        // 重置命令缓冲区
-        buffer.reset(vk::CommandBufferResetFlags{});
-
-        result.push_back(std::make_shared<SecondaryCommandBuffer>(buffer, this, vk::CommandBufferLevel::eSecondary));
-        reusedCount++;
-    }
-
-    // 如果对象池不够，分配新的
-    uint32_t needAllocate = count - reusedCount;
-    if (needAllocate > 0)
-    {
-        vk::CommandBufferAllocateInfo allocInfo{};
-        allocInfo.commandPool = threadPool->pool;
-        allocInfo.level = vk::CommandBufferLevel::eSecondary;
-        allocInfo.commandBufferCount = needAllocate;
-
-        std::vector<vk::CommandBuffer> buffers = m_device.Get().allocateCommandBuffers(allocInfo);
-
-        for (auto &buffer : buffers)
-        {
-            result.push_back(
-                std::make_shared<SecondaryCommandBuffer>(buffer, this, vk::CommandBufferLevel::eSecondary));
-        }
-
-        threadPool->allocatedCount += needAllocate;
-    }
-
-    return result;
-}
-
-void CommandPoolManager::recycleCommandBuffer(vk::CommandBuffer buffer, vk::CommandBufferLevel level)
+void CommandPoolManager::recycle(vk::CommandBuffer buffer, vk::CommandBufferLevel level)
 {
     // 回收到当前线程的对象池
-    if (!t_threadPool)
+    if (!t_threadPool || !buffer)
     {
-        return; // 线程已退出或命令池已销毁
+        return;
     }
+
+    // 减少使用计数
+    t_threadPool->inUseCount--;
 
     if (level == vk::CommandBufferLevel::ePrimary)
     {
@@ -276,21 +201,52 @@ void CommandPoolManager::recycleCommandBuffer(vk::CommandBuffer buffer, vk::Comm
     }
 }
 
-void CommandPoolManager::submitCommands(vk::Queue queue,
-                                        const std::vector<std::shared_ptr<PrimaryCommandBuffer>> &commands,
-                                        const std::vector<vk::Semaphore> &waitSemaphores,
-                                        const std::vector<vk::PipelineStageFlags> &waitStages,
-                                        const std::vector<vk::Semaphore> &signalSemaphores, vk::Fence fence)
+void CommandPoolManager::executeOnetime(vk::Queue queue, std::function<void(vk::CommandBuffer)> recordFunc)
 {
-    // 收集命令缓冲区句柄
-    std::vector<vk::CommandBuffer> buffers = collectBuffers(commands);
+    CommandBufferHandle cmd = allocate();
 
-    if (buffers.empty())
+    // 开始记录
+    vk::CommandBufferBeginInfo beginInfo{};
+    beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+    cmd->begin(beginInfo);
+
+    // 执行用户提供的记录函数
+    recordFunc(*cmd);
+
+    // 结束记录
+    cmd->end();
+
+    // 提交
+    vk::SubmitInfo submitInfo{};
+    submitInfo.setCommandBuffers(*cmd);
+
+    queue.submit(submitInfo, nullptr);
+    queue.waitIdle();
+
+    // cmd 析构时自动回收
+}
+
+void CommandPoolManager::submit(vk::Queue queue, const std::vector<CommandBufferHandle> &commandBuffers,
+                                const std::vector<vk::Semaphore> &waitSemaphores,
+                                const std::vector<vk::PipelineStageFlags> &waitStages,
+                                const std::vector<vk::Semaphore> &signalSemaphores, vk::Fence fence)
+{
+    if (commandBuffers.empty())
     {
         return;
     }
 
-    // 构建提交信息
+    // 从 CommandBufferHandle 中提取 vk::CommandBuffer
+    std::vector<vk::CommandBuffer> buffers;
+    buffers.reserve(commandBuffers.size());
+    for (const auto &handle : commandBuffers)
+    {
+        if (handle)
+        {
+            buffers.push_back(*handle);
+        }
+    }
+
     vk::SubmitInfo submitInfo{};
     submitInfo.setCommandBuffers(buffers);
 
@@ -305,41 +261,7 @@ void CommandPoolManager::submitCommands(vk::Queue queue,
         submitInfo.setSignalSemaphores(signalSemaphores);
     }
 
-    // 提交
     queue.submit(submitInfo, fence);
-
-    // 标记命令缓冲区为 Pending 状态
-#ifdef _DEBUG
-    for (auto &cmd : commands)
-    {
-        if (cmd)
-        {
-            cmd->m_state = CommandBufferState::Pending;
-        }
-    }
-#endif
-}
-
-std::shared_ptr<PrimaryCommandBuffer> CommandPoolManager::beginSingleTimeCommands()
-{
-    auto cmds = allocatePrimaryCommandBuffers(1);
-    cmds[0]->begin(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-    return cmds[0];
-}
-
-void CommandPoolManager::endSingleTimeCommands(std::shared_ptr<PrimaryCommandBuffer> command, vk::Queue queue)
-{
-    command->end();
-
-    // 提交并等待完成
-    vk::SubmitInfo submitInfo{};
-    vk::CommandBuffer buffer = command->getBuffer();
-    submitInfo.setCommandBuffers(buffer);
-
-    queue.submit(submitInfo, nullptr);
-    queue.waitIdle(); // 等待执行完成
-
-    // 命令缓冲区会在 shared_ptr 析构时自动回收
 }
 
 void CommandPoolManager::resetCommandPool(std::thread::id threadId)
@@ -349,6 +271,13 @@ void CommandPoolManager::resetCommandPool(std::thread::id threadId)
     if (it != m_threadPools.end())
     {
         auto &threadPool = it->second;
+
+        // ⚠️ 检查是否还有命令缓冲区在使用中
+        if (threadPool->inUseCount > 0)
+        {
+            throw std::runtime_error("Cannot reset command pool: " + std::to_string(threadPool->inUseCount.load()) +
+                                     " command buffers are still in use!");
+        }
 
         // 清空对象池
         while (!threadPool->freePrimaryBuffers.empty())
@@ -372,6 +301,16 @@ void CommandPoolManager::cleanup()
 
     for (auto &[threadId, threadPool] : m_threadPools)
     {
+        // ⚠️ 检查是否还有命令缓冲区在使用中
+        if (threadPool->inUseCount > 0)
+        {
+            // 可以选择抛出异常或记录警告
+            // 这里记录警告,因为程序退出时可能无法避免
+            // 实际项目中应使用日志系统
+            fprintf(stderr, "Warning: CommandPool cleanup with %zu command buffers still in use (thread %zu)\n",
+                    threadPool->inUseCount.load(), std::hash<std::thread::id>{}(threadId));
+        }
+
         if (threadPool && threadPool->pool)
         {
             m_device.Get().destroyCommandPool(threadPool->pool);

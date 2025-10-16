@@ -1,4 +1,5 @@
 #include "../public/Device.hpp"
+#include <set>
 
 /**
  * @file Device.cpp
@@ -7,7 +8,6 @@
  *
  * 该文件包含 Device 类的成员函数实现，负责 Vulkan 物理设备与逻辑设备的创建与管理。
  * 主要功能包括设备选择、队列族查询、逻辑设备创建以及资源清理等。
- * 注意：该类不拥有 vk::Instance，仅持有引用，实例生命周期应先于 Device。
  * @version 1.0
  * @date 2025-10-12
  */
@@ -15,7 +15,8 @@
 namespace vkcore
 {
 
-Device::Device(vk::Instance &instance, const Config &config) : m_instance(instance), m_config(config)
+Device::Device(vk::Instance &instance, VkSurfaceKHR &surface, const Config &config)
+    : m_instance(instance), m_surface(surface), m_config(config)
 {
     selectphyscialdevice();
     findqueuefamilies();
@@ -52,10 +53,87 @@ void Device::selectphyscialdevice()
 
 void Device::findqueuefamilies()
 {
+    // 获取所有队列族属性
+    std::vector<vk::QueueFamilyProperties> queueFamilies = m_physicalDevice.getQueueFamilyProperties();
+
+    // 遍历队列族，查找支持图形和呈现的队列族
+    uint32_t i = 0;
+    for (const auto &queueFamily : queueFamilies)
+    {
+        // 检查是否支持图形操作
+        if (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics)
+        {
+            m_queueFamilyIndices.graphicsFamily = i;
+        }
+
+        // 检查是否支持呈现操作（使用 surface）
+        VkBool32 presentSupport = false;
+        vkGetPhysicalDeviceSurfaceSupportKHR(m_physicalDevice, i, m_surface, &presentSupport);
+        if (presentSupport)
+        {
+            m_queueFamilyIndices.presentFamily = i;
+        }
+
+        // 如果两个队列族都找到了，提前退出
+        if (m_queueFamilyIndices.isComplete())
+        {
+            break;
+        }
+
+        i++;
+    }
+
+    // 验证是否找到了所需的队列族
+    if (!m_queueFamilyIndices.isComplete())
+    {
+        throw std::runtime_error("Failed to find required queue families!");
+    }
 }
 
 void Device::createlogicaldevice()
 {
+    // 准备队列创建信息
+    std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
+    // 使用 set 去重：如果图形和呈现是同一个队列族，只创建一次
+    std::set<uint32_t> uniqueQueueFamilies = {m_queueFamilyIndices.graphicsFamily.value(),
+                                              m_queueFamilyIndices.presentFamily.value()};
+
+    float queuePriority = 1.0f;
+    for (uint32_t queueFamily : uniqueQueueFamilies)
+    {
+        vk::DeviceQueueCreateInfo queueCreateInfo{};
+        queueCreateInfo.queueFamilyIndex = queueFamily;
+        queueCreateInfo.queueCount = 1;
+        queueCreateInfo.pQueuePriorities = &queuePriority;
+        queueCreateInfos.push_back(queueCreateInfo);
+    }
+
+    // 准备设备特性
+    vk::PhysicalDeviceFeatures deviceFeatures{};
+
+    // 准备设备创建信息
+    vk::DeviceCreateInfo createInfo{};
+    createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
+    createInfo.pQueueCreateInfos = queueCreateInfos.data();
+    createInfo.pEnabledFeatures = &deviceFeatures;
+
+    // 添加设备扩展
+    std::vector<const char *> extensionNames;
+    for (const auto &ext : m_config.deviceExtensions)
+    {
+        extensionNames.push_back(ext.c_str());
+    }
+    createInfo.enabledExtensionCount = static_cast<uint32_t>(extensionNames.size());
+    createInfo.ppEnabledExtensionNames = extensionNames.data();
+
+    // 创建逻辑设备
+    m_device = m_physicalDevice.createDevice(createInfo);
+
+    // 获取队列句柄
+    // 注意：如果图形和呈现队列族相同，两次获取的是同一个队列（索引0）
+    // 如果队列族不同，则分别从各自的队列族获取
+    m_graphicsQueue = m_device.getQueue(m_queueFamilyIndices.graphicsFamily.value(), 0);
+    m_presentQueue = m_device.getQueue(m_queueFamilyIndices.presentFamily.value(), 0);
 }
 
 bool Device::checkdeviceextensionsupport(vk::PhysicalDevice &device)

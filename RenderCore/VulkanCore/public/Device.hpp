@@ -71,7 +71,7 @@ class Device
      *
      * 构造完成后将调用 init() 执行设备选择与创建流程。
      */
-    Device(vk::Instance &instance, const Config &config = {});
+    Device(vk::Instance &instance, VkSurfaceKHR &surface, const Config &config = {});
     ~Device();
 
     /** 禁用拷贝与移动语义 */
@@ -126,6 +126,24 @@ class Device
     }
 
     /**
+     * @brief 返回图形队列族索引信息。
+     * @return QueueFamilyIndices 队列族索引结构体。
+     */
+    inline uint32_t GetGraphicsQueueFamilyIndices() const
+    {
+        return m_queueFamilyIndices.graphicsFamily.value();
+    }
+
+    /**
+     * @brief 返回呈现队列族索引信息。
+     * @return QueueFamilyIndices 队列族索引结构体。
+     */
+    inline uint32_t GetPresentQueueFamilyIndices() const
+    {
+        return m_queueFamilyIndices.presentFamily.value();
+    }
+
+    /**
      * @brief 释放由 Device 创建的资源（如逻辑设备），并进行必要的清理。
      *
      * 在析构前或显式需要时调用。
@@ -146,6 +164,12 @@ class Device
      * 注意：类不拥有实例，仅持有引用，实例生命周期应先于 Device。
      */
     vk::Instance &m_instance;
+
+    /**
+     * @brief Vulkan 表面句柄，用于呈现相关操作（如交换链创建）。
+     * 注意：类不拥有表面，仅持有引用，表面生命周期应先于 Device。
+     */
+    VkSurfaceKHR &m_surface;
 
     /**
      * @brief 被选择的物理设备（GPU）。用于查询特性、队列族与能力。

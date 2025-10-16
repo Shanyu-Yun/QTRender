@@ -44,12 +44,15 @@ target_include_directories(VulkanCore PRIVATE
 # 链接Vulkan库
 find_package(Vulkan REQUIRED)
 find_package(glm REQUIRED)
+find_package(VulkanMemoryAllocator CONFIG REQUIRED)
+
 
 # 创建命名空间别名以便其他 CMakeLists 可以使用 RenderCore::VulkanCore
 add_library(RenderCore::VulkanCore ALIAS VulkanCore)
 
 
-target_link_libraries(VulkanCore PUBLIC
+target_link_libraries(VulkanCore PRIVATE
+    VulkanMemoryAllocator
     Vulkan::Vulkan
     glm::glm
 )
