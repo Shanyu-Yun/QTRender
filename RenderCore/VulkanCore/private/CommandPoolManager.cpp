@@ -305,8 +305,6 @@ void CommandPoolManager::cleanup()
         if (threadPool->inUseCount > 0)
         {
             // 可以选择抛出异常或记录警告
-            // 这里记录警告,因为程序退出时可能无法避免
-            // 实际项目中应使用日志系统
             fprintf(stderr, "Warning: CommandPool cleanup with %zu command buffers still in use (thread %zu)\n",
                     threadPool->inUseCount.load(), std::hash<std::thread::id>{}(threadId));
         }
