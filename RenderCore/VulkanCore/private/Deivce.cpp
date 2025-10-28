@@ -111,8 +111,48 @@ void Device::createlogicaldevice()
     // 准备设备特性
     vk::PhysicalDeviceFeatures deviceFeatures{};
 
+    // 准备 Vulkan 1.3 和 1.2 特性结构
+    vk::PhysicalDeviceVulkan13Features features13{};
+    vk::PhysicalDeviceVulkan12Features features12{};
+
+    // 根据 config 启用 Vulkan 1.3 特性
+    for (const auto &feature : m_config.vulkan1_3_features)
+    {
+        if (feature == "dynamicRendering")
+            features13.dynamicRendering = VK_TRUE;
+        else if (feature == "synchronization2")
+            features13.synchronization2 = VK_TRUE;
+        else if (feature == "maintenance4")
+            features13.maintenance4 = VK_TRUE;
+    }
+
+    // 根据 config 启用 Vulkan 1.2 特性
+    for (const auto &feature : m_config.vulkan1_2_features)
+    {
+        if (feature == "bufferDeviceAddress")
+            features12.bufferDeviceAddress = VK_TRUE;
+        else if (feature == "descriptorIndexing")
+            features12.descriptorIndexing = VK_TRUE;
+        else if (feature == "timelineSemaphore")
+            features12.timelineSemaphore = VK_TRUE;
+    }
+
+    // 构建 pNext 链
+    void *pNext = nullptr;
+    if (!m_config.vulkan1_2_features.empty())
+    {
+        features12.pNext = pNext;
+        pNext = &features12;
+    }
+    if (!m_config.vulkan1_3_features.empty())
+    {
+        features13.pNext = pNext;
+        pNext = &features13;
+    }
+
     // 准备设备创建信息
     vk::DeviceCreateInfo createInfo{};
+    createInfo.pNext = pNext; // 设置 pNext 链
     createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
     createInfo.pQueueCreateInfos = queueCreateInfos.data();
     createInfo.pEnabledFeatures = &deviceFeatures;

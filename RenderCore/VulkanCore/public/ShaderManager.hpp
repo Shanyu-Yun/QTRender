@@ -39,11 +39,11 @@ struct ShaderModule
 
     /**
      * @brief 构造函数，创建着色器模块封装。
-     * @param dev 逻辑设备对象
+     * @param dev 逻辑设备对象引用
      * @param module 着色器模块句柄
      * @param st 着色器阶段标志
      */
-    ShaderModule(Device dev, vk::ShaderModule module, vk::ShaderStageFlagBits st)
+    ShaderModule(Device &dev, vk::ShaderModule module, vk::ShaderStageFlagBits st)
         : device(dev.get()), shaderModule(module), stage(st)
     {
     }

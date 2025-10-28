@@ -23,6 +23,18 @@
 #include <vector>
 #include <vulkan/vulkan.hpp>
 
+// 为 vk::DescriptorSetLayout 提供 std::hash 特化
+namespace std
+{
+template <> struct hash<vk::DescriptorSetLayout>
+{
+    size_t operator()(const vk::DescriptorSetLayout &layout) const noexcept
+    {
+        return hash<VkDescriptorSetLayout>()(static_cast<VkDescriptorSetLayout>(layout));
+    }
+};
+} // namespace std
+
 namespace vkcore
 {
 /**
@@ -123,7 +135,8 @@ class DescriptorLayoutCache
         m_layoutcache;
 
     /// 反向映射：布局句柄 -> 绑定列表（用于后续查询）
-    std::unordered_map<vk::DescriptorSetLayout, std::vector<vk::DescriptorSetLayoutBinding>> m_layoutBindings;
+    /// 使用 map 而不是 unordered_map，因为 vk::DescriptorSetLayout 的 hash 可能有问题
+    std::map<vk::DescriptorSetLayout, std::vector<vk::DescriptorSetLayoutBinding>> m_layoutBindings;
 
     /// 互斥锁，保护线程安全
     mutable std::mutex m_mtx;

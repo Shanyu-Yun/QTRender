@@ -46,11 +46,13 @@ target_include_directories(RenderCore PRIVATE
 # 查找并链接Vulkan相关库
 find_package(Vulkan REQUIRED)
 find_package(glm REQUIRED)
+find_package(VulkanMemoryAllocator CONFIG REQUIRED)
 
 # 链接库
 target_link_libraries(RenderCore PUBLIC
     Vulkan::Vulkan
     glm::glm
+    GPUOpen::VulkanMemoryAllocator
 )
 
 # 添加子目录

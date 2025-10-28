@@ -134,6 +134,26 @@ class SwapChain
     }
 
     /**
+     * @brief 获取飞行中栅栏（别名，与getFlightFence相同）
+     * @param index 帧索引（0 到 MAX_FRAMES_IN_FLIGHT-1）
+     * @return vk::Fence 飞行中栅栏
+     */
+    inline vk::Fence getInFlightFence(uint32_t index) const
+    {
+        return m_FlightFences[index];
+    }
+
+    /**
+     * @brief 获取渲染完成信号量
+     * @param index 帧索引（0 到 MAX_FRAMES_IN_FLIGHT-1）
+     * @return vk::Semaphore 渲染完成信号量
+     */
+    inline vk::Semaphore getRenderFinishedSemaphore(uint32_t index) const
+    {
+        return m_renderFinishedSemaphores[index];
+    }
+
+    /**
      * @brief 获取当前帧索引
      * @return uint32_t 当前帧索引（0 或 1）
      */
@@ -162,8 +182,10 @@ class SwapChain
 
     std::vector<vk::Image> m_images;                       ///< 交换链图像句柄（由交换链拥有）
     std::vector<vk::ImageView> m_imageViews;               ///< 图像视图（由本类创建和销毁）
-    std::vector<vk::Semaphore> m_imageAvailableSemaphores; ///< 图像可用信号量（每帧一个）
-    std::vector<vk::Fence> m_FlightFences;                 ///< 飞行中栅栏（每帧一个）
+    std::vector<vk::Semaphore> m_imageAvailableSemaphores; ///< 图像可用信号量（每个交换链图像一个）
+    std::vector<vk::Semaphore> m_renderFinishedSemaphores; ///< 渲染完成信号量（每个交换链图像一个）
+    std::vector<vk::Fence> m_FlightFences;                 ///< 飞行中栅栏（每帧一个，MAX_FRAMES_IN_FLIGHT）
+    std::vector<vk::Fence> m_imagesInFlight; ///< 跟踪每个图像是否正在使用（初始为 nullptr）
 
     Device &m_device;             ///< 逻辑设备引用
     vk::SwapchainKHR m_swapchain; ///< 交换链句柄

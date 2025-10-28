@@ -37,8 +37,6 @@ endif()
 
 # 查找必要的包
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
-find_package(Vulkan REQUIRED)
-find_package(glm REQUIRED)
 
 # 启用Qt6的MOC、UIC和RCC
 set(CMAKE_AUTOMOC ON)
@@ -60,8 +58,6 @@ target_link_libraries(${PROJECT_NAME}
     UI
     Qt6::Core
     Qt6::Widgets
-    Vulkan::Vulkan
-    glm::glm
 )
 
 # 设置包含目录

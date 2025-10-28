@@ -25,11 +25,11 @@ SwapChain::~SwapChain()
 
 vk::Result SwapChain::acquireNextImage(uint32_t &imageIndex)
 {
-    // 等待当前帧的栅栏
+    // 1. 等待当前帧的栅栏（确保这一帧的命令缓冲区不再使用）
     [[maybe_unused]] vk::Result waitResult =
         m_device.get().waitForFences(1, &m_FlightFences[m_currentFrameIndex], VK_TRUE, UINT64_MAX);
 
-    // 获取下一个图像索引
+    // 2. 获取下一个图像索引（使用 per-frame 的 imageAvailable 信号量）
     vk::Result result = m_device.get().acquireNextImageKHR(
         m_swapchain, UINT64_MAX, m_imageAvailableSemaphores[m_currentFrameIndex], nullptr, &imageIndex);
 
@@ -44,7 +44,17 @@ vk::Result SwapChain::acquireNextImage(uint32_t &imageIndex)
         throw std::runtime_error("Failed to acquire swap chain image!");
     }
 
-    // 重置栅栏
+    // 3. 如果这个图像还在被使用，等待它完成
+    if (m_imagesInFlight[imageIndex])
+    {
+        [[maybe_unused]] vk::Result imageWaitResult =
+            m_device.get().waitForFences(1, &m_imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+    }
+
+    // 4. 标记这个图像现在由当前帧使用
+    m_imagesInFlight[imageIndex] = m_FlightFences[m_currentFrameIndex];
+
+    // 5. 重置当前帧的栅栏
     [[maybe_unused]] vk::Result resetResult = m_device.get().resetFences(1, &m_FlightFences[m_currentFrameIndex]);
 
     return result;
@@ -76,19 +86,37 @@ vk::Result SwapChain::present(vk::Semaphore renderFinishedSemaphore, uint32_t im
 void SwapChain::cleanup()
 {
     // 销毁同步对象
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    // 清理 per-frame imageAvailable 信号量
+    for (size_t i = 0; i < m_imageAvailableSemaphores.size(); i++)
     {
         if (m_imageAvailableSemaphores[i])
         {
             m_device.get().destroySemaphore(m_imageAvailableSemaphores[i]);
         }
+    }
+
+    // 清理 per-image renderFinished 信号量
+    for (size_t i = 0; i < m_renderFinishedSemaphores.size(); i++)
+    {
+        if (m_renderFinishedSemaphores[i])
+        {
+            m_device.get().destroySemaphore(m_renderFinishedSemaphores[i]);
+        }
+    }
+
+    // 清理所有栅栏（数量 = MAX_FRAMES_IN_FLIGHT）
+    for (size_t i = 0; i < m_FlightFences.size(); i++)
+    {
         if (m_FlightFences[i])
         {
             m_device.get().destroyFence(m_FlightFences[i]);
         }
     }
+
     m_imageAvailableSemaphores.clear();
+    m_renderFinishedSemaphores.clear();
     m_FlightFences.clear();
+    m_imagesInFlight.clear();
 
     // 销毁 ImageView（Image 由交换链管理，不需要销毁）
     for (auto imageView : m_imageViews)
@@ -234,10 +262,30 @@ void SwapChain::createimages()
 
 void SwapChain::createsyncobjects()
 {
+    // imageAvailable 信号量：per-frame (MAX_FRAMES_IN_FLIGHT)
+    // renderFinished 信号量：per-image (swapchain image count)
+    // 栅栏：per-frame (MAX_FRAMES_IN_FLIGHT)
+
+    size_t imageCount = m_images.size();
+
     m_imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+    m_renderFinishedSemaphores.resize(imageCount);
+    m_imagesInFlight.resize(imageCount, nullptr); // 初始化为 nullptr
     m_FlightFences.resize(MAX_FRAMES_IN_FLIGHT);
 
     vk::SemaphoreCreateInfo semaphoreInfo;
+
+    // Per-frame imageAvailable 信号量
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        m_imageAvailableSemaphores[i] = m_device.get().createSemaphore(semaphoreInfo);
+    }
+
+    // Per-image renderFinished 信号量
+    for (size_t i = 0; i < imageCount; i++)
+    {
+        m_renderFinishedSemaphores[i] = m_device.get().createSemaphore(semaphoreInfo);
+    }
 
     // 栅栏初始状态为已信号（signaled），避免第一帧等待死锁
     vk::FenceCreateInfo fenceInfo;
@@ -245,7 +293,6 @@ void SwapChain::createsyncobjects()
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
-        m_imageAvailableSemaphores[i] = m_device.get().createSemaphore(semaphoreInfo);
         m_FlightFences[i] = m_device.get().createFence(fenceInfo);
     }
 }
