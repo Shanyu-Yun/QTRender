@@ -68,7 +68,7 @@ class ResourceManager
      * @param srgb 纹理是否为 sRGB 格式
      * @return std::shared_ptr<Texture> 纹理资源
      */
-    std::shared_ptr<Texture> loadTexture(const std::string &filepath, bool srgb);
+    std::shared_ptr<Texture> loadTexture(const std::string &filepath, bool srgb = false);
 
     /**
      * @brief 加载或获取缓存的材质 (通过 .json 文件定义)
@@ -78,9 +78,132 @@ class ResourceManager
     std::shared_ptr<Material> loadMaterial(const std::string &filepath);
 
     /**
+     * @brief 通过名称获取已缓存的网格
+     * @param name 网格名称或文件路径
+     * @return std::shared_ptr<Mesh> 网格资源，如果不存在则返回 nullptr
+     */
+    std::shared_ptr<Mesh> getMesh(const std::string &name) const;
+
+    /**
+     * @brief 通过名称获取已缓存的纹理
+     * @param name 纹理名称或文件路径
+     * @return std::shared_ptr<Texture> 纹理资源，如果不存在则返回 nullptr
+     */
+    std::shared_ptr<Texture> getTexture(const std::string &name) const;
+
+    /**
+     * @brief 通过名称获取已缓存的材质
+     * @param name 材质名称或文件路径
+     * @return std::shared_ptr<Material> 材质资源，如果不存在则返回 nullptr
+     */
+    std::shared_ptr<Material> getMaterial(const std::string &name) const;
+
+    /**
      * @brief 获取默认的1x1白色纹理 (用于无纹理材质)
      */
     std::shared_ptr<Texture> getDefaultWhiteTexture();
+
+    /**
+     * @brief 获取默认的法线贴图 (用于无法线贴图的材质)
+     */
+    std::shared_ptr<Texture> getDefaultNormalTexture();
+
+    // ==================== GPU 缓冲区/图像创建接口 ====================
+
+    /**
+     * @brief 从已加载的网格创建 GPU 缓冲区
+     * @param meshName 网格名称或文件路径
+     * @return true 如果成功创建缓冲区，false 如果网格不存在或已有缓冲区
+     */
+    bool createBufferFromMesh(const std::string &meshName);
+
+    /**
+     * @brief 从已加载的纹理创建 GPU 图像
+     * @param textureName 纹理名称或文件路径
+     * @return true 如果成功创建图像，false 如果纹理不存在或已有图像
+     */
+    bool createImageFromTexture(const std::string &textureName);
+
+    /**
+     * @brief 从已加载的材质创建 GPU 资源（纹理图像 + 描述符集）
+     * @param materialName 材质名称或文件路径
+     * @return true 如果成功创建资源，false 如果材质不存在或已有资源
+     */
+    bool createResourcesFromMaterial(const std::string &materialName);
+
+    /**
+     * @brief 批量创建多个网格的 GPU 缓冲区
+     * @param meshNames 网格名称列表
+     * @return 成功创建的数量
+     */
+    size_t createBuffersFromMeshes(const std::vector<std::string> &meshNames);
+
+    /**
+     * @brief 批量创建多个纹理的 GPU 图像
+     * @param textureNames 纹理名称列表
+     * @return 成功创建的数量
+     */
+    size_t createImagesFromTextures(const std::vector<std::string> &textureNames);
+
+    /**
+     * @brief 注册自定义网格（不从文件加载）
+     * @param name 网格的唯一名称
+     * @param mesh 网格数据
+     * @return true 如果成功注册，false 如果名称已存在
+     */
+    bool registerMesh(const std::string &name, std::shared_ptr<Mesh> mesh);
+
+    /**
+     * @brief 注册自定义纹理（不从文件加载）
+     * @param name 纹理的唯一名称
+     * @param texture 纹理数据
+     * @return true 如果成功注册，false 如果名称已存在
+     */
+    bool registerTexture(const std::string &name, std::shared_ptr<Texture> texture);
+
+    /**
+     * @brief 注册自定义材质（不从文件加载）
+     * @param name 材质的唯一名称
+     * @param material 材质数据
+     * @return true 如果成功注册，false 如果名称已存在
+     */
+    bool registerMaterial(const std::string &name, std::shared_ptr<Material> material);
+
+    /**
+     * @brief 卸载指定的网格资源
+     * @param name 网格名称
+     * @return true 如果成功卸载，false 如果不存在
+     */
+    bool unloadMesh(const std::string &name);
+
+    /**
+     * @brief 卸载指定的纹理资源
+     * @param name 纹理名称
+     * @return true 如果成功卸载，false 如果不存在
+     */
+    bool unloadTexture(const std::string &name);
+
+    /**
+     * @brief 卸载指定的材质资源
+     * @param name 材质名称
+     * @return true 如果成功卸载，false 如果不存在
+     */
+    bool unloadMaterial(const std::string &name);
+
+    /**
+     * @brief 获取所有已缓存的网格名称
+     */
+    std::vector<std::string> getMeshNames() const;
+
+    /**
+     * @brief 获取所有已缓存的纹理名称
+     */
+    std::vector<std::string> getTextureNames() const;
+
+    /**
+     * @brief 获取所有已缓存的材质名称
+     */
+    std::vector<std::string> getMaterialNames() const;
 
   private:
     // ==================== 私有辅助函数 (all_lowercase) ====================
