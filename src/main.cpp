@@ -4,6 +4,7 @@
 #include "RenderCore/VulkanCore/public/Pipeline.hpp"
 #include "RenderCore/VulkanCore/public/ShaderManager.hpp"
 #include "RenderCore/VulkanCore/public/SwapChain.hpp"
+#include "RenderCore/VulkanCore/public/VKResource.hpp"
 #include "UI/MainWindow.hpp"
 #include "UI/VulkanContainer.hpp"
 #include "UI/VulkanWindow.hpp"
@@ -216,52 +217,36 @@ class TriangleRenderer
     {
         std::cout << "\n=== 创建红色纹理 ===" << std::endl;
 
-        // 1. 创建 1x1 红色纹理图像
-        vk::ImageCreateInfo imageInfo = {};
-        imageInfo.imageType = vk::ImageType::e2D;
-        imageInfo.extent.width = 1;
-        imageInfo.extent.height = 1;
-        imageInfo.extent.depth = 1;
-        imageInfo.mipLevels = 1;
-        imageInfo.arrayLayers = 1;
-        imageInfo.format = vk::Format::eR8G8B8A8Unorm;
-        imageInfo.tiling = vk::ImageTiling::eOptimal;
-        imageInfo.initialLayout = vk::ImageLayout::eUndefined;
-        imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
-        imageInfo.samples = vk::SampleCountFlagBits::e1;
-        imageInfo.sharingMode = vk::SharingMode::eExclusive;
+        // 1. 使用 ImageDesc 描述纹理属性
+        vkcore::ImageDesc imageDesc = {};
+        imageDesc.imageType = vk::ImageType::e2D;
+        imageDesc.format = vk::Format::eR8G8B8A8Unorm;
+        imageDesc.extent = vk::Extent3D{1, 1, 1};
+        imageDesc.mipLevels = 1;
+        imageDesc.arrayLayers = 1;
+        imageDesc.samples = vk::SampleCountFlagBits::e1;
+        imageDesc.tiling = vk::ImageTiling::eOptimal;
+        imageDesc.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
+        imageDesc.memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY;
 
-        VmaAllocationCreateInfo allocInfo = {};
-        allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+        // 2. 使用 Image 类创建纹理（自动管理内存）
+        m_texture = std::make_unique<vkcore::Image>("RedTexture", m_device, m_allocator, imageDesc);
 
-        VkImage rawImage;
-        VkImageCreateInfo rawImageInfo = static_cast<VkImageCreateInfo>(imageInfo);
-        vmaCreateImage(m_allocator, &rawImageInfo, &allocInfo, &rawImage, &m_textureAllocation, nullptr);
-        m_texture = rawImage;
-
-        // 2. 创建 staging buffer 并上传红色像素数据
+        // 3. 创建 staging buffer 并上传红色像素数据
         uint32_t pixelData = 0xFF0000FF; // RGBA: 红色
 
-        VkBufferCreateInfo stagingBufferInfo = {};
-        stagingBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        stagingBufferInfo.size = 4; // 4 bytes (RGBA)
-        stagingBufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        vkcore::BufferDesc stagingDesc = {};
+        stagingDesc.size = 4; // 4 bytes (RGBA)
+        stagingDesc.usageFlags = vk::BufferUsageFlagBits::eTransferSrc;
+        stagingDesc.memoryUsage = VMA_MEMORY_USAGE_CPU_ONLY;
+        stagingDesc.allocationCreateFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 
-        VmaAllocationCreateInfo stagingAllocInfo = {};
-        stagingAllocInfo.usage = VMA_MEMORY_USAGE_CPU_ONLY;
+        auto stagingBuffer = std::make_unique<vkcore::Buffer>("StagingBuffer", m_device, m_allocator, stagingDesc);
 
-        VkBuffer stagingBuffer;
-        VmaAllocation stagingAllocation;
-        vmaCreateBuffer(m_allocator, &stagingBufferInfo, &stagingAllocInfo, &stagingBuffer, &stagingAllocation,
-                        nullptr);
+        // 写入数据到 staging buffer
+        stagingBuffer->write(&pixelData, 4, 0);
 
-        // 复制数据到 staging buffer
-        void *data;
-        vmaMapMemory(m_allocator, stagingAllocation, &data);
-        memcpy(data, &pixelData, 4);
-        vmaUnmapMemory(m_allocator, stagingAllocation);
-
-        // 3. 使用命令缓冲区复制数据到图像
+        // 4. 使用命令缓冲区复制数据到图像
         auto cmd = m_commandPoolManager->allocate();
         vk::CommandBufferBeginInfo beginInfo{};
         beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -273,7 +258,7 @@ class TriangleRenderer
         barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = m_texture;
+        barrier.image = m_texture->get();
         barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
         barrier.subresourceRange.baseMipLevel = 0;
         barrier.subresourceRange.levelCount = 1;
@@ -297,7 +282,8 @@ class TriangleRenderer
         region.imageOffset = vk::Offset3D{0, 0, 0};
         region.imageExtent = vk::Extent3D{1, 1, 1};
 
-        cmd->copyBufferToImage(stagingBuffer, m_texture, vk::ImageLayout::eTransferDstOptimal, 1, &region);
+        cmd->copyBufferToImage(stagingBuffer->get(), m_texture->get(), vk::ImageLayout::eTransferDstOptimal, 1,
+                               &region);
 
         // 转换布局：TransferDst -> ShaderReadOnly
         barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
@@ -317,21 +303,7 @@ class TriangleRenderer
         m_device.getGraphicsQueue().submit(submitInfo, nullptr);
         m_device.getGraphicsQueue().waitIdle();
 
-        // 清理 staging buffer
-        vmaDestroyBuffer(m_allocator, stagingBuffer, stagingAllocation);
-
-        // 4. 创建 ImageView
-        vk::ImageViewCreateInfo viewInfo = {};
-        viewInfo.image = m_texture;
-        viewInfo.viewType = vk::ImageViewType::e2D;
-        viewInfo.format = vk::Format::eR8G8B8A8Unorm;
-        viewInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
-
-        m_textureView = m_device.get().createImageView(viewInfo);
+        // staging buffer 会自动销毁（RAII）
 
         // 5. 创建 Sampler
         vk::SamplerCreateInfo samplerInfo = {};
@@ -373,7 +345,7 @@ class TriangleRenderer
         // 4. 使用 DescriptorUpdater 更新 Descriptor Set
         vk::DescriptorImageInfo imageInfo = {};
         imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        imageInfo.imageView = m_textureView;
+        imageInfo.imageView = m_texture->getView(); // 使用 Image 类的 getView()
         imageInfo.sampler = m_sampler;
 
         vkcore::DescriptorUpdater::begin(m_device, m_descriptorSet)
@@ -551,17 +523,8 @@ class TriangleRenderer
             m_device.get().destroySampler(m_sampler);
             m_sampler = nullptr;
         }
-        if (m_textureView)
-        {
-            m_device.get().destroyImageView(m_textureView);
-            m_textureView = nullptr;
-        }
-        if (m_texture && m_textureAllocation)
-        {
-            vmaDestroyImage(m_allocator, static_cast<VkImage>(m_texture), m_textureAllocation);
-            m_texture = nullptr;
-            m_textureAllocation = VK_NULL_HANDLE;
-        }
+        // m_texture 会自动销毁（RAII）
+        m_texture.reset();
 
         m_shaderManager->cleanup();
         m_vertShader.reset();
@@ -604,9 +567,7 @@ class TriangleRenderer
     std::unique_ptr<vkcore::Pipeline> m_pipeline;
 
     // 纹理相关资源
-    vk::Image m_texture;
-    VmaAllocation m_textureAllocation = VK_NULL_HANDLE;
-    vk::ImageView m_textureView;
+    std::unique_ptr<vkcore::Image> m_texture; ///< 红色纹理（RAII 管理）
     vk::Sampler m_sampler;
 
     // Descriptor 资源

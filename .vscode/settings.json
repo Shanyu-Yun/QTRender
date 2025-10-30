@@ -80,6 +80,8 @@
         "xtree": "cpp",
         "xutility": "cpp",
         "cinttypes": "cpp",
-        "shared_mutex": "cpp"
-    }
+        "shared_mutex": "cpp",
+        "filesystem": "cpp"
+    },
+    "cmake.sourceDirectory": "E:/Github_repo/QTRender/src"
 }

@@ -1,4 +1,3 @@
-/build
 
-# 编译后的着色器字节码
-shaders/spv/*.spv
+/build
+/shaders/spv
