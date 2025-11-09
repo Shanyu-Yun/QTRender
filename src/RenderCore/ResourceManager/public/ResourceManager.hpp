@@ -206,6 +206,21 @@ class ResourceManager
      */
     std::vector<std::string> getMaterialNames() const;
 
+    // ==================== 描述符布局访问接口 ====================
+
+    /**
+     * @brief 获取材质描述符集布局
+     * @details 用于在管线创建时添加到PipelineBuilder中
+     * @return vk::DescriptorSetLayout 材质描述符集布局句柄
+     */
+    vk::DescriptorSetLayout getMaterialLayout() const;
+
+    /**
+     * @brief 检查ResourceManager是否已初始化
+     * @return bool 是否已初始化
+     */
+    bool isInitialized() const;
+
   private:
     // ==================== 私有辅助函数 (all_lowercase) ====================
 
@@ -230,6 +245,16 @@ class ResourceManager
      * @brief (私有) 创建所有默认纹理 (1x1 白色, 1x1 法线)
      */
     void createdefaulttextures();
+
+    /**
+     * @brief (私有) 为材质创建Uniform Buffer
+     */
+    void createMaterialUniformBuffer(std::shared_ptr<Material> material);
+
+    /**
+     * @brief (私有) 更新材质的描述符集，绑定纹理和采样器
+     */
+    void updateMaterialDescriptorSet(std::shared_ptr<Material> material);
 
     /**
      * @brief (私有) 获取或创建缓存的采样器

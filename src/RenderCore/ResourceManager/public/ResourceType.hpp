@@ -95,6 +95,9 @@ struct Material
     std::shared_ptr<vkcore::ShaderModule> vertexShader;
     std::shared_ptr<vkcore::ShaderModule> fragmentShader;
 
+    // GPU资源
+    std::shared_ptr<vkcore::Buffer> uniformBuffer; ///< 材质参数Uniform Buffer
+
     // Vulkan 描述符集 (Material 的核心 "实例")
     // 当一个 Material 被创建时，它应该被分配一个描述符集
     vk::DescriptorSet descriptorSet;

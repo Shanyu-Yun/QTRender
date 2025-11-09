@@ -1,7 +1,13 @@
 #pragma once
 
-#include "RenderCore/ResourceManager/public/ResourceType.hpp" // 依赖 Mesh 和 Material
 #include <memory>
+
+// 前向声明，避免包含依赖问题
+namespace rendercore
+{
+struct Mesh;
+struct Material;
+} // namespace rendercore
 
 namespace rendercore
 {

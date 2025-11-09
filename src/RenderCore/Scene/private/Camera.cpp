@@ -1,4 +1,4 @@
-#include "..\public\Camera.hpp"
+#include "../public/Camera.hpp"
 
 namespace rendercore
 {

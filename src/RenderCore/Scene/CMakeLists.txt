@@ -43,10 +43,11 @@ target_include_directories(Scene PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/private
 )
 
-# 链接glm库用于数学计算
+# 链接依赖
 find_package(glm REQUIRED)
 target_link_libraries(Scene PUBLIC
     glm::glm
+    RenderCore::ResourceManager
 )
 
 # 设置编译定义

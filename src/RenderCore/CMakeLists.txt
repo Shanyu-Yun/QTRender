@@ -56,14 +56,12 @@ target_link_libraries(RenderCore PUBLIC
 )
 
 # 添加子目录
-add_subdirectory(Camera)
 add_subdirectory(ResourceManager)
 add_subdirectory(Scene)
 add_subdirectory(VulkanCore)
 
 # 链接子模块库
 target_link_libraries(RenderCore PUBLIC
-    RenderCore::Camera
     RenderCore::ResourceManager
     RenderCore::Scene
     RenderCore::VulkanCore

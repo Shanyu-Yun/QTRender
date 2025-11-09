@@ -56,15 +56,65 @@ class SceneNode : public std::enable_shared_from_this<SceneNode>
     // --- 变换 ---
 
     /**
-     * @brief 获取此节点的局部变换 (可修改)
+     * @brief 获取此节点的局部变换 (只读访问)
+     * @details 返回const引用，禁止外部直接修改
      */
-    Transform &getTransform();
+    const Transform &getTransform() const;
 
     /**
      * @brief 获取此节点的最终世界变换矩阵 (只读)
      * @details 递归地与其父节点的世界矩阵相乘，并缓存结果
      */
     glm::mat4 getWorldMatrix();
+
+    // --- 变换便捷访问器 (只读) ---
+
+    /**
+     * @brief 获取节点位置
+     */
+    const glm::vec3 &getPosition() const;
+
+    /**
+     * @brief 获取节点旋转
+     */
+    const glm::quat &getRotation() const;
+
+    /**
+     * @brief 获取节点缩放
+     */
+    const glm::vec3 &getScale() const;
+
+    // --- 变换修改器 (自动处理脏标记) ---
+
+    /**
+     * @brief 设置完整的变换
+     * @param transform 新的变换
+     */
+    void setTransform(const Transform &transform);
+
+    /**
+     * @brief 设置节点位置
+     * @param position 新位置
+     */
+    void setPosition(const glm::vec3 &position);
+
+    /**
+     * @brief 设置节点旋转
+     * @param rotation 新旋转
+     */
+    void setRotation(const glm::quat &rotation);
+
+    /**
+     * @brief 设置节点缩放
+     * @param scale 新缩放
+     */
+    void setScale(const glm::vec3 &scale);
+
+    /**
+     * @brief 在当前位置基础上进行平移
+     * @param delta 位移向量
+     */
+    void translate(const glm::vec3 &delta);
 
     // --- 组件 ---
 

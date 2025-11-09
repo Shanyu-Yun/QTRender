@@ -389,6 +389,25 @@ std::vector<std::string> ResourceManager::getMaterialNames() const
     return names;
 }
 
+// ==================== 描述符布局访问接口 ====================
+
+vk::DescriptorSetLayout ResourceManager::getMaterialLayout() const
+{
+
+    if (!m_initialized)
+    {
+        throw std::runtime_error("ResourceManager not initialized");
+    }
+
+    return m_materialLayout;
+}
+
+bool ResourceManager::isInitialized() const
+{
+    std::lock_guard<std::mutex> lock(m_mtx);
+    return m_initialized;
+}
+
 // ==================== 私有辅助函数 ====================
 
 void ResourceManager::buildmateriallayout()
@@ -449,8 +468,28 @@ std::shared_ptr<vkcore::Buffer> ResourceManager::createbufferfromdata(const void
 std::shared_ptr<vkcore::Image> ResourceManager::createimagefromdata(const void *data, int width, int height,
                                                                     vk::Format format)
 {
-    // 计算图像大小 (假设每像素4字节)
-    uint32_t formatSize = 4;
+    // 根据格式计算每像素字节数
+    uint32_t formatSize = 4; // 默认RGBA
+    switch (format)
+    {
+    case vk::Format::eR8Unorm:
+        formatSize = 1;
+        break;
+    case vk::Format::eR8G8Unorm:
+        formatSize = 2;
+        break;
+    case vk::Format::eR8G8B8Unorm:
+        formatSize = 3;
+        break;
+    case vk::Format::eR8G8B8A8Unorm:
+    case vk::Format::eR8G8B8A8Srgb:
+        formatSize = 4;
+        break;
+    default:
+        formatSize = 4; // 安全默认值
+        break;
+    }
+
     vk::DeviceSize imageSize = width * height * formatSize;
 
     // 创建暂存缓冲区
@@ -561,6 +600,33 @@ void ResourceManager::createdefaulttextures()
     m_textureCache["__default_normal__"] = m_defaultNormalTexture;
 }
 
+void ResourceManager::createMaterialUniformBuffer(std::shared_ptr<Material> material)
+{
+    // 定义材质Uniform Buffer结构（匹配着色器中的结构）
+    struct MaterialUniform
+    {
+        glm::vec4 baseColorFactor;
+        glm::vec3 emissiveFactor;
+        float metallicFactor;
+        float roughnessFactor;
+        float normalScale;
+        float alphaCutoff;
+        float padding; // 对齐到16字节边界
+    };
+
+    MaterialUniform uniformData = {};
+    uniformData.baseColorFactor = material->baseColorFactor;
+    uniformData.emissiveFactor = material->emissiveFactor;
+    uniformData.metallicFactor = material->metallicFactor;
+    uniformData.roughnessFactor = material->roughnessFactor;
+    uniformData.normalScale = material->normalScale;
+    uniformData.alphaCutoff = material->alphaCutoff;
+
+    // 创建Uniform Buffer
+    material->uniformBuffer =
+        createbufferfromdata(&uniformData, sizeof(MaterialUniform), vk::BufferUsageFlagBits::eUniformBuffer);
+}
+
 vk::Sampler ResourceManager::getorsampler(vk::Filter filter, vk::SamplerAddressMode addressMode)
 {
     // 创建采样器配置哈希
@@ -594,6 +660,63 @@ vk::Sampler ResourceManager::getorsampler(vk::Filter filter, vk::SamplerAddressM
     return sampler;
 }
 
+void ResourceManager::updateMaterialDescriptorSet(std::shared_ptr<Material> material)
+{
+    // 1. 准备Uniform Buffer描述符信息
+    vk::DescriptorBufferInfo bufferInfo = {};
+    bufferInfo.buffer = material->uniformBuffer->get();
+    bufferInfo.offset = 0;
+    bufferInfo.range = VK_WHOLE_SIZE;
+
+    // 2. 准备所有纹理的描述符信息
+    std::vector<vk::DescriptorImageInfo> imageInfos(6);
+
+    // Base Color Texture (binding 1)
+    imageInfos[0].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+    imageInfos[0].imageView = material->baseColorTexture->image->getView();
+    imageInfos[0].sampler = *material->baseColorTexture->sampler;
+
+    // Metallic Texture (binding 2)
+    imageInfos[1].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+    imageInfos[1].imageView = material->metallicTexture->image->getView();
+    imageInfos[1].sampler = *material->metallicTexture->sampler;
+
+    // Roughness Texture (binding 3)
+    imageInfos[2].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+    imageInfos[2].imageView = material->roughnessTexture->image->getView();
+    imageInfos[2].sampler = *material->roughnessTexture->sampler;
+
+    // Normal Texture (binding 4)
+    imageInfos[3].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+    imageInfos[3].imageView = material->normalTexture->image->getView();
+    imageInfos[3].sampler = *material->normalTexture->sampler;
+
+    // Occlusion Texture (binding 5)
+    imageInfos[4].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+    imageInfos[4].imageView = material->occlusionTexture->image->getView();
+    imageInfos[4].sampler = *material->occlusionTexture->sampler;
+
+    // Emissive Texture (binding 6)
+    imageInfos[5].imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+    imageInfos[5].imageView = material->emissiveTexture->image->getView();
+    imageInfos[5].sampler = *material->emissiveTexture->sampler;
+
+    // 使用 DescriptorUpdater 批量更新所有绑定
+    auto updater = vkcore::DescriptorUpdater::begin(*m_device, material->descriptorSet);
+
+    // 绑定 Uniform Buffer 到 binding 0
+    updater.writeBuffer(0, vk::DescriptorType::eUniformBuffer, bufferInfo);
+
+    // 绑定所有纹理到对应的binding点
+    for (int i = 0; i < 6; ++i)
+    {
+        updater.writeImage(i + 1, vk::DescriptorType::eCombinedImageSampler, imageInfos[i]);
+    }
+
+    // 提交更新
+    updater.update();
+}
+
 std::shared_ptr<Material> ResourceManager::buildmaterial(const std::string &name, const Material &materialInfo,
                                                          const TexturePaths &textureNames,
                                                          const std::string &shaderName)
@@ -601,10 +724,10 @@ std::shared_ptr<Material> ResourceManager::buildmaterial(const std::string &name
     auto material = std::make_shared<Material>(materialInfo);
     material->name = name;
 
-    // 加载纹理 (如果路径不为空)
+    // 加载纹理 (如果路径不为空) - 使用内部无锁版本避免死锁
     if (!textureNames.baseColor.empty())
     {
-        material->baseColorTexture = loadTexture(textureNames.baseColor);
+        material->baseColorTexture = loadanduploadtexture(textureNames.baseColor, false);
     }
     else
     {
@@ -613,7 +736,7 @@ std::shared_ptr<Material> ResourceManager::buildmaterial(const std::string &name
 
     if (!textureNames.metallic.empty())
     {
-        material->metallicTexture = loadTexture(textureNames.metallic);
+        material->metallicTexture = loadanduploadtexture(textureNames.metallic, false);
     }
     else
     {
@@ -622,7 +745,7 @@ std::shared_ptr<Material> ResourceManager::buildmaterial(const std::string &name
 
     if (!textureNames.roughness.empty())
     {
-        material->roughnessTexture = loadTexture(textureNames.roughness);
+        material->roughnessTexture = loadanduploadtexture(textureNames.roughness, false);
     }
     else
     {
@@ -631,7 +754,7 @@ std::shared_ptr<Material> ResourceManager::buildmaterial(const std::string &name
 
     if (!textureNames.normal.empty())
     {
-        material->normalTexture = loadTexture(textureNames.normal);
+        material->normalTexture = loadanduploadtexture(textureNames.normal, false);
     }
     else
     {
@@ -640,7 +763,7 @@ std::shared_ptr<Material> ResourceManager::buildmaterial(const std::string &name
 
     if (!textureNames.occlusion.empty())
     {
-        material->occlusionTexture = loadTexture(textureNames.occlusion);
+        material->occlusionTexture = loadanduploadtexture(textureNames.occlusion, false);
     }
     else
     {
@@ -649,7 +772,7 @@ std::shared_ptr<Material> ResourceManager::buildmaterial(const std::string &name
 
     if (!textureNames.emissive.empty())
     {
-        material->emissiveTexture = loadTexture(textureNames.emissive);
+        material->emissiveTexture = loadanduploadtexture(textureNames.emissive, false);
     }
     else
     {
@@ -666,7 +789,11 @@ std::shared_ptr<Material> ResourceManager::buildmaterial(const std::string &name
     // 分配描述符集
     material->descriptorSet = m_descAllocator->allocate(m_materialLayout);
 
-    // TODO: 更新描述符集（需要根据实际的描述符更新逻辑来实现）
+    // 创建材质参数Uniform Buffer
+    createMaterialUniformBuffer(material);
+
+    // 更新描述符集 - 绑定纹理和采样器
+    updateMaterialDescriptorSet(material);
 
     return material;
 }
