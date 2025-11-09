@@ -75,15 +75,20 @@ struct Material
     float roughnessFactor{1.0f};
     float alphaCutoff{0.5f}; ///< Alpha 测试阈值（仅在 AlphaMode::Mask 时使用）
 
+    // 扩展参数
+    float normalScale{1.0f};     ///< 法线强度
+    float refractionIndex{1.0f}; ///< 折射率（用于透明材质）
+
     // 渲染状态
     AlphaMode alphaMode{AlphaMode::Opaque}; ///< Alpha 混合模式
     bool doubleSided{false};                ///< 是否双面渲染
 
-    // 纹理 (由 ResourceManager 管理)
+    // 纹理 (由 ResourceManager 管理) - 支持分离的金属度/粗糙度纹理
     std::shared_ptr<Texture> baseColorTexture;
-    std::shared_ptr<Texture> metallicRoughnessTexture;
+    std::shared_ptr<Texture> metallicTexture;  ///< 独立金属度纹理
+    std::shared_ptr<Texture> roughnessTexture; ///< 独立粗糙度纹理
     std::shared_ptr<Texture> normalTexture;
-    std::shared_ptr<Texture> occlusionTexture;
+    std::shared_ptr<Texture> occlusionTexture; ///< AO 纹理
     std::shared_ptr<Texture> emissiveTexture;
 
     // 着色器 (由 ShaderManager 管理)

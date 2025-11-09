@@ -1,7 +1,10 @@
 #pragma once
 
-#include "../VulkanCore/public/Device.hpp" // 包含 vkcore::Device
+#include "RenderCore/VulkanCore/public/Device.hpp" // 包含 vkcore::Device
+#include "ResourceManagerUtils.hpp"
 #include "ResourceType.hpp"
+#include <filesystem>
+#include <future>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -16,6 +19,13 @@ class DescriptorAllocator;
 class DescriptorLayoutCache;
 } // namespace vkcore
 
+// 前向声明来自 ResourceManagerUtils.hpp 的加载器
+namespace rendercore
+{
+struct TextureData;
+struct MeshData; // 从文件加载的网格原始数据结构
+} // namespace rendercore
+
 namespace rendercore
 {
 
@@ -24,6 +34,12 @@ namespace rendercore
  * @brief 负责加载、缓存和管理所有GPU资源 (Mesh, Texture, Material)
  * @details 这是一个核心服务，编排 VulkanCore 组件
  * 来执行数据驱动的资源加载。
+ * 优化点：
+ * 1. 封装加载与上传：loadMesh/loadTexture/loadMaterial
+ * 现在一步到位，返回完全准备好的 GPU 资源。
+ * 2. 简化的 API：移除了 createBufferFromMesh 等两步加载函数。
+ * 3. 明确的注册接口：registerMesh/registerTexture
+ * 现在接受 CPU 数据（顶点/像素）并自动处理上传。
  */
 class ResourceManager
 {
@@ -53,48 +69,100 @@ class ResourceManager
      */
     void cleanup();
 
-    // ==================== 公共加载接口 (camelCase) ====================
+    // ==================== 资源加载接口 (Get-or-Load) ====================
 
     /**
      * @brief 加载或获取缓存的网格 (例如 .obj)
+     * @details 自动处理文件加载、解析和GPU缓冲区创建/上传
      * @param filepath 文件路径 (用作缓存键)
-     * @return std::shared_ptr<Mesh> 网格资源
+     * @return std::shared_ptr<Mesh> GPU 就绪的网格资源
      */
-    std::shared_ptr<Mesh> loadMesh(const std::string &filepath);
+    std::shared_ptr<Mesh> loadMesh(const std::filesystem::path &filepath);
 
     /**
      * @brief 加载或获取缓存的纹理
+     * @details 自动处理文件加载、解析和GPU图像创建/上传
      * @param filepath 文件路径 (用作缓存键)
      * @param srgb 纹理是否为 sRGB 格式
-     * @return std::shared_ptr<Texture> 纹理资源
+     * @return std::shared_ptr<Texture> GPU 就绪的纹理资源
      */
-    std::shared_ptr<Texture> loadTexture(const std::string &filepath, bool srgb = false);
+    std::shared_ptr<Texture> loadTexture(const std::filesystem::path &filepath, bool srgb = false);
 
     /**
      * @brief 加载或获取缓存的材质 (通过 .json 文件定义)
+     * @details 自动加载JSON，递归加载其纹理和着色器，
+     * 并创建和更新 DescriptorSet。
      * @param filepath 材质定义文件 (.json) 的路径
-     * @return std::shared_ptr<Material> 材质资源
+     * @return std::shared_ptr<Material> GPU 就绪的材质资源
      */
-    std::shared_ptr<Material> loadMaterial(const std::string &filepath);
+    std::shared_ptr<Material> loadMaterial(const std::filesystem::path &filepath);
+
+    // ==================== 异步加载接口 (可选) ====================
+
+    /**
+     * @brief 异步加载网格
+     * @param filepath 文件路径
+     * @return std::future<std::shared_ptr<Mesh>>
+     */
+    std::future<std::shared_ptr<Mesh>> loadMeshAsync(const std::filesystem::path &filepath);
+
+    /**
+     * @brief 异步加载纹理
+     * @param filepath 文件路径
+     * @param srgb 是否为 sRGB
+     * @return std::future<std::shared_ptr<Texture>>
+     */
+    std::future<std::shared_ptr<Texture>> loadTextureAsync(const std::filesystem::path &filepath, bool srgb = false);
+
+    // ==================== 资源注册接口 (程序化创建) ====================
+
+    /**
+     * @brief 注册自定义网格（从原始顶点/索引数据）
+     * @param name 网格的唯一名称
+     * @param vertices 顶点数据
+     * @param indices 索引数据
+     * @return std::shared_ptr<Mesh> GPU 就绪的网格资源
+     */
+    std::shared_ptr<Mesh> registerMesh(const std::string &name, const std::vector<Vertex> &vertices,
+                                       const std::vector<uint32_t> &indices);
+
+    /**
+     * @brief 注册自定义纹理（从原始像素数据）
+     * @param name 纹理的唯一名称
+     * @param pixels 像素数据
+     * @param width 宽度
+     * @param height 高度
+     * @param format 格式
+     * @return std::shared_ptr<Texture> GPU 就绪的纹理资源
+     */
+    std::shared_ptr<Texture> registerTexture(const std::string &name, const void *pixels, int width, int height,
+                                             vk::Format format);
+
+    /**
+     * @brief 注册自定义材质
+     * @param name 材质的唯一名称
+     * @param materialInfo 材质参数
+     * @param textureNames 依赖的纹理名称 (必须已通过 loadTexture/registerTexture 注册)
+     * @param shaderName 依赖的着色器名称 (必须已在 ShaderManager 中)
+     * @return std::shared_ptr<Material> GPU 就绪的材质资源
+     */
+    std::shared_ptr<Material> registerMaterial(const std::string &name, const Material &materialInfo,
+                                               const TexturePaths &textureNames, const std::string &shaderName);
+
+    // ==================== 资源访问与管理 ====================
 
     /**
      * @brief 通过名称获取已缓存的网格
-     * @param name 网格名称或文件路径
-     * @return std::shared_ptr<Mesh> 网格资源，如果不存在则返回 nullptr
      */
     std::shared_ptr<Mesh> getMesh(const std::string &name) const;
 
     /**
      * @brief 通过名称获取已缓存的纹理
-     * @param name 纹理名称或文件路径
-     * @return std::shared_ptr<Texture> 纹理资源，如果不存在则返回 nullptr
      */
     std::shared_ptr<Texture> getTexture(const std::string &name) const;
 
     /**
      * @brief 通过名称获取已缓存的材质
-     * @param name 材质名称或文件路径
-     * @return std::shared_ptr<Material> 材质资源，如果不存在则返回 nullptr
      */
     std::shared_ptr<Material> getMaterial(const std::string &name) const;
 
@@ -108,85 +176,18 @@ class ResourceManager
      */
     std::shared_ptr<Texture> getDefaultNormalTexture();
 
-    // ==================== GPU 缓冲区/图像创建接口 ====================
-
-    /**
-     * @brief 从已加载的网格创建 GPU 缓冲区
-     * @param meshName 网格名称或文件路径
-     * @return true 如果成功创建缓冲区，false 如果网格不存在或已有缓冲区
-     */
-    bool createBufferFromMesh(const std::string &meshName);
-
-    /**
-     * @brief 从已加载的纹理创建 GPU 图像
-     * @param textureName 纹理名称或文件路径
-     * @return true 如果成功创建图像，false 如果纹理不存在或已有图像
-     */
-    bool createImageFromTexture(const std::string &textureName);
-
-    /**
-     * @brief 从已加载的材质创建 GPU 资源（纹理图像 + 描述符集）
-     * @param materialName 材质名称或文件路径
-     * @return true 如果成功创建资源，false 如果材质不存在或已有资源
-     */
-    bool createResourcesFromMaterial(const std::string &materialName);
-
-    /**
-     * @brief 批量创建多个网格的 GPU 缓冲区
-     * @param meshNames 网格名称列表
-     * @return 成功创建的数量
-     */
-    size_t createBuffersFromMeshes(const std::vector<std::string> &meshNames);
-
-    /**
-     * @brief 批量创建多个纹理的 GPU 图像
-     * @param textureNames 纹理名称列表
-     * @return 成功创建的数量
-     */
-    size_t createImagesFromTextures(const std::vector<std::string> &textureNames);
-
-    /**
-     * @brief 注册自定义网格（不从文件加载）
-     * @param name 网格的唯一名称
-     * @param mesh 网格数据
-     * @return true 如果成功注册，false 如果名称已存在
-     */
-    bool registerMesh(const std::string &name, std::shared_ptr<Mesh> mesh);
-
-    /**
-     * @brief 注册自定义纹理（不从文件加载）
-     * @param name 纹理的唯一名称
-     * @param texture 纹理数据
-     * @return true 如果成功注册，false 如果名称已存在
-     */
-    bool registerTexture(const std::string &name, std::shared_ptr<Texture> texture);
-
-    /**
-     * @brief 注册自定义材质（不从文件加载）
-     * @param name 材质的唯一名称
-     * @param material 材质数据
-     * @return true 如果成功注册，false 如果名称已存在
-     */
-    bool registerMaterial(const std::string &name, std::shared_ptr<Material> material);
-
     /**
      * @brief 卸载指定的网格资源
-     * @param name 网格名称
-     * @return true 如果成功卸载，false 如果不存在
      */
     bool unloadMesh(const std::string &name);
 
     /**
      * @brief 卸载指定的纹理资源
-     * @param name 纹理名称
-     * @return true 如果成功卸载，false 如果不存在
      */
     bool unloadTexture(const std::string &name);
 
     /**
      * @brief 卸载指定的材质资源
-     * @param name 材质名称
-     * @return true 如果成功卸载，false 如果不存在
      */
     bool unloadMaterial(const std::string &name);
 
@@ -210,29 +211,18 @@ class ResourceManager
 
     /**
      * @brief (私有) 为所有PBR材质创建标准的描述符集布局
-     * @details 在 initialize() 中调用，创建并缓存一个布局，
-     * 例如: binding 0: baseColor, binding 1: normal, ...
+     * @details 在 initialize() 中调用，创建并缓存一个布局
      */
     void buildmateriallayout();
 
     /**
      * @brief (私有) 创建并上传一个 vkcore::Buffer
-     * @param data 原始数据指针 (如顶点/索引)
-     * @param size 数据大小 (字节)
-     * @param usage 缓冲区用途 (VK_BUFFER_USAGE_VERTEX_BUFFER_BIT 等)
-     * @return std::shared_ptr<vkcore::Buffer>
      */
     std::shared_ptr<vkcore::Buffer> createbufferfromdata(const void *data, vk::DeviceSize size,
                                                          vk::BufferUsageFlags usage);
 
     /**
      * @brief (私有) 创建并上传一个 vkcore::Image
-     * @details 这是 main.cpp 中 createRedTexture 的泛化版本
-     * @param data 图像的原始像素数据
-     * @param width 图像宽度
-     * @param height 图像高度
-     * @param format 图像格式
-     * @return std::shared_ptr<vkcore::Image>
      */
     std::shared_ptr<vkcore::Image> createimagefromdata(const void *data, int width, int height, vk::Format format);
 
@@ -246,6 +236,28 @@ class ResourceManager
      */
     vk::Sampler getorsampler(vk::Filter filter, vk::SamplerAddressMode addressMode);
 
+    /**
+     * @brief (私有) loadMaterial 和 registerMaterial 的通用逻辑
+     * @details 负责链接纹理、着色器并创建 DescriptorSet
+     */
+    std::shared_ptr<Material> buildmaterial(const std::string &name, const Material &materialInfo,
+                                            const TexturePaths &textureNames, const std::string &shaderName);
+
+    /**
+     * @brief (私有) 实际的纹理加载和上传逻辑
+     */
+    std::shared_ptr<Texture> loadanduploadtexture(const std::filesystem::path &filepath, bool srgb);
+
+    /**
+     * @brief (私有) 实际的网格加载和上传逻辑
+     */
+    std::shared_ptr<Mesh> loadanduploadmesh(const std::filesystem::path &filepath);
+
+    /**
+     * @brief (私有) 合并多个网格数据为单一网格
+     */
+    MeshData mergeMeshData(const std::vector<MeshData> &meshDataList, const std::string &baseName);
+
   private:
     // ==================== 私有成员 (m_ prefix, all_lowercase) ====================
     bool m_initialized = false;
@@ -258,7 +270,7 @@ class ResourceManager
     vkcore::DescriptorAllocator *m_descAllocator = nullptr;
     vkcore::DescriptorLayoutCache *m_layoutCache = nullptr;
 
-    // 资源缓存 (使用文件路径作为键)
+    // 资源缓存 (使用文件路径或注册名称作为键)
     std::unordered_map<std::string, std::shared_ptr<Mesh>> m_meshCache;
     std::unordered_map<std::string, std::shared_ptr<Texture>> m_textureCache;
     std::unordered_map<std::string, std::shared_ptr<Material>> m_materialCache;
@@ -274,7 +286,7 @@ class ResourceManager
     vk::DescriptorSetLayout m_materialLayout;
 
     // 互斥锁，保护所有缓存的线程安全
-    std::mutex m_mtx;
+    mutable std::mutex m_mtx;
 };
 
 } // namespace rendercore

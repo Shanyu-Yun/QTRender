@@ -1,3 +1,4 @@
+#include "RenderCore/ResourceManager/public/ResourceManager.hpp"
 #include "RenderCore/VulkanCore/public/CommandPoolManager.hpp"
 #include "RenderCore/VulkanCore/public/Descriptor.hpp"
 #include "RenderCore/VulkanCore/public/Device.hpp"
@@ -42,16 +43,16 @@ std::vector<uint32_t> loadSPIRV(const std::string &filename)
 /**
  * @brief 渲染器类 - 封装完整的渲染循环
  */
-class TriangleRenderer
+class MeshRenderer
 {
   public:
-    TriangleRenderer(vkcore::Device &device, vk::SurfaceKHR surface, VulkanWindow *window)
+    MeshRenderer(vkcore::Device &device, vk::SurfaceKHR surface, VulkanWindow *window)
         : m_device(device), m_surface(surface), m_window(window)
     {
         initVulkanResources(surface);
     }
 
-    ~TriangleRenderer()
+    ~MeshRenderer()
     {
         cleanup();
     }
@@ -173,13 +174,24 @@ class TriangleRenderer
         m_shaderManager = std::make_unique<vkcore::ShaderManager>(m_device);
         loadShaders();
 
-        // 5. 创建红色纹理
-        createRedTexture();
-
-        // 6. 创建 Descriptor
+        // 5. 创建 Descriptor
         createDescriptors();
 
-        // 7. 创建图形管线
+        // 6. 创建 ResourceManager 并加载模型
+        std::cout << "创建 ResourceManager..." << std::endl;
+        m_resourceManager = std::make_unique<rendercore::ResourceManager>();
+
+        std::cout << "初始化 ResourceManager..." << std::endl;
+        m_resourceManager->initialize(m_device, m_allocator, *m_commandPoolManager, *m_shaderManager,
+                                      *m_descriptorAllocator, *m_descriptorLayoutCache);
+        std::cout << "ResourceManager 初始化完成" << std::endl;
+
+        loadMesh();
+
+        // 7. 更新 Descriptor Set，使用默认纹理
+        updateDescriptorSet();
+
+        // 8. 创建图形管线
         createPipeline();
 
         m_initialized = true;
@@ -192,17 +204,16 @@ class TriangleRenderer
 
         try
         {
-            // 使用纹理着色器
-            auto fragCode = loadSPIRV("E:/Github_repo/QTRender/shaders/spv/triangle_texture.frag.spv");
-            auto vertCode = loadSPIRV("E:/Github_repo/QTRender/shaders/spv/triangle_texture.vert.spv");
+            // 使用网格着色器
+            auto fragCode = loadSPIRV("E:/Github_repo/QTRender/assets/shaders/spv/mesh.frag.spv");
+            auto vertCode = loadSPIRV("E:/Github_repo/QTRender/assets/shaders/spv/mesh.vert.spv");
 
-            m_vertShader = m_shaderManager->createShaderModule("triangle_texture.vert", vertCode,
-                                                               vk::ShaderStageFlagBits::eVertex);
-            m_fragShader = m_shaderManager->createShaderModule("triangle_texture.frag", fragCode,
-                                                               vk::ShaderStageFlagBits::eFragment);
+            m_vertShader = m_shaderManager->createShaderModule("mesh.vert", vertCode, vk::ShaderStageFlagBits::eVertex);
+            m_fragShader =
+                m_shaderManager->createShaderModule("mesh.frag", fragCode, vk::ShaderStageFlagBits::eFragment);
 
-            std::cout << "✓ 顶点着色器: triangle_texture.vert.spv" << std::endl;
-            std::cout << "✓ 片段着色器: triangle_texture.frag.spv" << std::endl;
+            std::cout << "✓ 顶点着色器: mesh.vert.spv" << std::endl;
+            std::cout << "✓ 片段着色器: mesh.frag.spv" << std::endl;
         }
         catch (const std::exception &e)
         {
@@ -213,116 +224,47 @@ class TriangleRenderer
         std::cout << "===================\n" << std::endl;
     }
 
-    void createRedTexture()
+    void loadMesh()
     {
-        std::cout << "\n=== 创建红色纹理 ===" << std::endl;
+        std::cout << "\n=== 加载网格模型 ===" << std::endl;
 
-        // 1. 使用 ImageDesc 描述纹理属性
-        vkcore::ImageDesc imageDesc = {};
-        imageDesc.imageType = vk::ImageType::e2D;
-        imageDesc.format = vk::Format::eR8G8B8A8Unorm;
-        imageDesc.extent = vk::Extent3D{1, 1, 1};
-        imageDesc.mipLevels = 1;
-        imageDesc.arrayLayers = 1;
-        imageDesc.samples = vk::SampleCountFlagBits::e1;
-        imageDesc.tiling = vk::ImageTiling::eOptimal;
-        imageDesc.usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
-        imageDesc.memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY;
+        try
+        {
+            // 加载汽车模型
+            std::filesystem::path carPath = "E:/Github_repo/QTRender/assets/car/car.obj";
+            m_mesh = m_resourceManager->loadMesh(carPath);
 
-        // 2. 使用 Image 类创建纹理（自动管理内存）
-        m_texture = std::make_unique<vkcore::Image>("RedTexture", m_device, m_allocator, imageDesc);
+            std::cout << "✓ 网格模型加载成功: " << carPath.string() << std::endl;
+            std::cout << "  顶点数: " << m_mesh->vertexCount << std::endl;
+            std::cout << "  索引数: " << m_mesh->indexCount << std::endl;
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << "✗ 网格模型加载失败: " << e.what() << std::endl;
+            throw;
+        }
 
-        // 3. 创建 staging buffer 并上传红色像素数据
-        uint32_t pixelData = 0xFF0000FF; // RGBA: 红色
+        std::cout << "===================\n" << std::endl;
+    }
 
-        vkcore::BufferDesc stagingDesc = {};
-        stagingDesc.size = 4; // 4 bytes (RGBA)
-        stagingDesc.usageFlags = vk::BufferUsageFlagBits::eTransferSrc;
-        stagingDesc.memoryUsage = VMA_MEMORY_USAGE_CPU_ONLY;
-        stagingDesc.allocationCreateFlags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+    void updateDescriptorSet()
+    {
+        std::cout << "\n=== 更新 Descriptor Set ===" << std::endl;
 
-        auto stagingBuffer = std::make_unique<vkcore::Buffer>("StagingBuffer", m_device, m_allocator, stagingDesc);
+        // 使用 ResourceManager 的默认白色纹理
+        auto defaultTexture = m_resourceManager->getDefaultWhiteTexture();
 
-        // 写入数据到 staging buffer
-        stagingBuffer->write(&pixelData, 4, 0);
+        // 使用 DescriptorUpdater 更新 Descriptor Set
+        vk::DescriptorImageInfo imageInfo = {};
+        imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        imageInfo.imageView = defaultTexture->image->getView();
+        imageInfo.sampler = *defaultTexture->sampler;
 
-        // 4. 使用命令缓冲区复制数据到图像
-        auto cmd = m_commandPoolManager->allocate();
-        vk::CommandBufferBeginInfo beginInfo{};
-        beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-        cmd->begin(beginInfo);
+        vkcore::DescriptorUpdater::begin(m_device, m_descriptorSet)
+            .writeImage(0, vk::DescriptorType::eCombinedImageSampler, imageInfo)
+            .update();
 
-        // 转换布局：Undefined -> TransferDst
-        vk::ImageMemoryBarrier barrier = {};
-        barrier.oldLayout = vk::ImageLayout::eUndefined;
-        barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = m_texture->get();
-        barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-        barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = 1;
-        barrier.srcAccessMask = vk::AccessFlagBits::eNone;
-        barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
-
-        cmd->pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eTransfer,
-                             vk::DependencyFlags{}, nullptr, nullptr, barrier);
-
-        // 复制 buffer 到 image
-        vk::BufferImageCopy region = {};
-        region.bufferOffset = 0;
-        region.bufferRowLength = 0;
-        region.bufferImageHeight = 0;
-        region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-        region.imageSubresource.mipLevel = 0;
-        region.imageSubresource.baseArrayLayer = 0;
-        region.imageSubresource.layerCount = 1;
-        region.imageOffset = vk::Offset3D{0, 0, 0};
-        region.imageExtent = vk::Extent3D{1, 1, 1};
-
-        cmd->copyBufferToImage(stagingBuffer->get(), m_texture->get(), vk::ImageLayout::eTransferDstOptimal, 1,
-                               &region);
-
-        // 转换布局：TransferDst -> ShaderReadOnly
-        barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
-        barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-
-        cmd->pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader,
-                             vk::DependencyFlags{}, nullptr, nullptr, barrier);
-
-        cmd->end();
-
-        // 提交命令并等待完成
-        vk::SubmitInfo submitInfo = {};
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &(*cmd);
-        m_device.getGraphicsQueue().submit(submitInfo, nullptr);
-        m_device.getGraphicsQueue().waitIdle();
-
-        // staging buffer 会自动销毁（RAII）
-
-        // 5. 创建 Sampler
-        vk::SamplerCreateInfo samplerInfo = {};
-        samplerInfo.magFilter = vk::Filter::eLinear;
-        samplerInfo.minFilter = vk::Filter::eLinear;
-        samplerInfo.addressModeU = vk::SamplerAddressMode::eRepeat;
-        samplerInfo.addressModeV = vk::SamplerAddressMode::eRepeat;
-        samplerInfo.addressModeW = vk::SamplerAddressMode::eRepeat;
-        samplerInfo.anisotropyEnable = VK_FALSE;
-        samplerInfo.maxAnisotropy = 1.0f;
-        samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
-        samplerInfo.unnormalizedCoordinates = VK_FALSE;
-        samplerInfo.compareEnable = VK_FALSE;
-        samplerInfo.compareOp = vk::CompareOp::eAlways;
-        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
-
-        m_sampler = m_device.get().createSampler(samplerInfo);
-
-        std::cout << "✓ 1x1 红色纹理创建成功" << std::endl;
+        std::cout << "✓ Descriptor Set 更新完成" << std::endl;
         std::cout << "===================\n" << std::endl;
     }
 
@@ -342,33 +284,61 @@ class TriangleRenderer
         // 3. 分配 Descriptor Set
         m_descriptorSet = m_descriptorAllocator->allocate(layout);
 
-        // 4. 使用 DescriptorUpdater 更新 Descriptor Set
-        vk::DescriptorImageInfo imageInfo = {};
-        imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        imageInfo.imageView = m_texture->getView(); // 使用 Image 类的 getView()
-        imageInfo.sampler = m_sampler;
-
-        vkcore::DescriptorUpdater::begin(m_device, m_descriptorSet)
-            .writeImage(0, vk::DescriptorType::eCombinedImageSampler, imageInfo)
-            .update();
-
         std::cout << "✓ Descriptor Set 创建成功" << std::endl;
         std::cout << "===================\n" << std::endl;
     }
 
     void createPipeline()
     {
+        // 创建顶点输入描述符
+        vk::VertexInputBindingDescription bindingDescription = {};
+        bindingDescription.binding = 0;
+        bindingDescription.stride = sizeof(rendercore::Vertex);
+        bindingDescription.inputRate = vk::VertexInputRate::eVertex;
+
+        std::array<vk::VertexInputAttributeDescription, 4> attributeDescriptions = {};
+
+        // Position (vec3)
+        attributeDescriptions[0].binding = 0;
+        attributeDescriptions[0].location = 0;
+        attributeDescriptions[0].format = vk::Format::eR32G32B32Sfloat;
+        attributeDescriptions[0].offset = offsetof(rendercore::Vertex, position);
+
+        // Normal (vec3)
+        attributeDescriptions[1].binding = 0;
+        attributeDescriptions[1].location = 1;
+        attributeDescriptions[1].format = vk::Format::eR32G32B32Sfloat;
+        attributeDescriptions[1].offset = offsetof(rendercore::Vertex, normal);
+
+        // TexCoord (vec2)
+        attributeDescriptions[2].binding = 0;
+        attributeDescriptions[2].location = 2;
+        attributeDescriptions[2].format = vk::Format::eR32G32Sfloat;
+        attributeDescriptions[2].offset = offsetof(rendercore::Vertex, texCoord);
+
+        // Color (vec4)
+        attributeDescriptions[3].binding = 0;
+        attributeDescriptions[3].location = 3;
+        attributeDescriptions[3].format = vk::Format::eR32G32B32A32Sfloat;
+        attributeDescriptions[3].offset = offsetof(rendercore::Vertex, color);
+
+        vk::PipelineVertexInputStateCreateInfo vertexInputInfo = {};
+        vertexInputInfo.vertexBindingDescriptionCount = 1;
+        vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+        vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+
         vk::PipelineColorBlendAttachmentState colorBlendAttachment = {};
         colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
                                               vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
         colorBlendAttachment.blendEnable = VK_FALSE;
 
-        // 创建光栅化状态（禁用背面剔除以确保三角形可见）
+        // 创建光栅化状态（启用背面剔除）
         vk::PipelineRasterizationStateCreateInfo rasterizationState = {};
         rasterizationState.depthClampEnable = VK_FALSE;
         rasterizationState.rasterizerDiscardEnable = VK_FALSE;
         rasterizationState.polygonMode = vk::PolygonMode::eFill;
-        rasterizationState.cullMode = vk::CullModeFlagBits::eNone; // 禁用背面剔除
+        rasterizationState.cullMode = vk::CullModeFlagBits::eBack;
         rasterizationState.frontFace = vk::FrontFace::eCounterClockwise;
         rasterizationState.depthBiasEnable = VK_FALSE;
         rasterizationState.lineWidth = 1.0f;
@@ -382,6 +352,7 @@ class TriangleRenderer
         m_pipeline = vkcore::PipelineBuilder(m_device)
                          .addShaderModule(m_vertShader)
                          .addShaderModule(m_fragShader)
+                         .setVertexInput(vertexInputInfo)
                          .setRasterization(rasterizationState)
                          .addColorAttachment(m_swapchain->getSwapchainFormat(), colorBlendAttachment)
                          .addDynamicState(vk::DynamicState::eViewport)
@@ -451,8 +422,14 @@ class TriangleRenderer
         scissor.extent = m_swapchain->getSwapchainExtent();
         cmd.setScissor(0, 1, &scissor);
 
-        // 6. 绘制三角形
-        cmd.draw(3, 1, 0, 0);
+        // 6. 绑定顶点和索引缓冲区
+        vk::Buffer vertexBuffers[] = {m_mesh->vertexBuffer->get()};
+        vk::DeviceSize offsets[] = {0};
+        cmd.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+        cmd.bindIndexBuffer(m_mesh->indexBuffer->get(), 0, vk::IndexType::eUint32);
+
+        // 7. 绘制网格
+        cmd.drawIndexed(m_mesh->indexCount, 1, 0, 0, 0);
 
         cmd.endRendering();
 
@@ -517,14 +494,9 @@ class TriangleRenderer
         m_descriptorAllocator.reset();
         m_descriptorLayoutCache.reset();
 
-        // 清理纹理资源
-        if (m_sampler)
-        {
-            m_device.get().destroySampler(m_sampler);
-            m_sampler = nullptr;
-        }
-        // m_texture 会自动销毁（RAII）
-        m_texture.reset();
+        // 清理网格和 ResourceManager
+        m_mesh.reset();
+        m_resourceManager.reset();
 
         m_shaderManager->cleanup();
         m_vertShader.reset();
@@ -566,9 +538,9 @@ class TriangleRenderer
     std::shared_ptr<vkcore::ShaderModule> m_fragShader;
     std::unique_ptr<vkcore::Pipeline> m_pipeline;
 
-    // 纹理相关资源
-    std::unique_ptr<vkcore::Image> m_texture; ///< 红色纹理（RAII 管理）
-    vk::Sampler m_sampler;
+    // ResourceManager 和网格资源
+    std::unique_ptr<rendercore::ResourceManager> m_resourceManager;
+    std::shared_ptr<rendercore::Mesh> m_mesh;
 
     // Descriptor 资源
     std::unique_ptr<vkcore::DescriptorAllocator> m_descriptorAllocator;
@@ -622,10 +594,10 @@ int main(int argc, char *argv[])
     std::cout << "使用设备: " << device.getPhysicalDevice().getProperties().deviceName << std::endl;
 
     // 创建渲染器
-    std::unique_ptr<TriangleRenderer> renderer;
+    std::unique_ptr<MeshRenderer> renderer;
     try
     {
-        renderer = std::make_unique<TriangleRenderer>(device, surface, vulkanWindow);
+        renderer = std::make_unique<MeshRenderer>(device, surface, vulkanWindow);
         std::cout << "渲染器初始化成功\n" << std::endl;
     }
     catch (const std::exception &e)
