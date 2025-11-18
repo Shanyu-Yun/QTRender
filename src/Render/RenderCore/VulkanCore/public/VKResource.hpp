@@ -127,6 +127,15 @@ class Buffer : public GpuResource
     }
 
     /**
+     * @brief 获取 Buffer 使用标志
+     * @return vk::BufferUsageFlags Buffer 的使用标志
+     */
+    vk::BufferUsageFlags getUsage() const
+    {
+        return m_usage;
+    }
+
+    /**
      * @brief 获取 Buffer 的设备地址
      * @return vk::DeviceAddress GPU 端可访问的设备地址
      * @details 用于 GPU 端的缓冲区访问（如光线追踪、间接绘制等）
@@ -170,9 +179,10 @@ class Buffer : public GpuResource
     VmaAllocator m_allocator = nullptr;   ///< VMA 分配器
     VmaAllocation m_allocation = nullptr; ///< VMA 分配句柄
 
-    vk::Buffer m_buffer = nullptr; ///< Vulkan Buffer 句柄
-    vk::DeviceSize m_size = 0;     ///< Buffer 大小（字节）
-    void *m_mappedData = nullptr;  ///< 已映射的 CPU 指针（nullptr 表示未映射）
+    vk::Buffer m_buffer = nullptr;                         ///< Vulkan Buffer 句柄
+    vk::DeviceSize m_size = 0;                             ///< Buffer 大小（字节）
+    vk::BufferUsageFlags m_usage = vk::BufferUsageFlags(); ///< Buffer 使用标志
+    void *m_mappedData = nullptr;                          ///< 已映射的 CPU 指针（nullptr 表示未映射）
 
   private:
     /**
@@ -257,6 +267,24 @@ class Image : public GpuResource
     }
 
     /**
+     * @brief 获取数组层数量
+     * @return uint32_t 数组层数量
+     */
+    inline uint32_t getArrayLayers() const
+    {
+        return m_arrayLayers;
+    }
+
+    /**
+     * @brief 获取 Image 使用标志
+     * @return vk::ImageUsageFlags Image 的使用标志
+     */
+    inline vk::ImageUsageFlags getUsage() const
+    {
+        return m_usage;
+    }
+
+    /**
      * @brief 获取当前 ImageLayout
      * @return vk::ImageLayout 当前的图像布局
      * @details 用于确定是否需要进行布局转换
@@ -287,6 +315,8 @@ class Image : public GpuResource
     vk::Format m_format = vk::Format::eUndefined;                  ///< 图像格式
     vk::Extent3D m_extent = {1, 1, 1};                             ///< 图像尺寸
     uint32_t m_mipLevels = 1;                                      ///< MIP 级别数量
+    uint32_t m_arrayLayers = 1;                                    ///< 数组层数量
+    vk::ImageUsageFlags m_usage = vk::ImageUsageFlags();           ///< Image 使用标志
     vk::ImageLayout m_currentLayout = vk::ImageLayout::eUndefined; ///< 当前图像布局（手动跟踪）
 
   private:

@@ -1,11 +1,11 @@
-#include "RenderCore/ResourceManager/public/ResourceManager.hpp"
-#include "RenderCore/VulkanCore/public/CommandPoolManager.hpp"
-#include "RenderCore/VulkanCore/public/Descriptor.hpp"
-#include "RenderCore/VulkanCore/public/Device.hpp"
-#include "RenderCore/VulkanCore/public/Pipeline.hpp"
-#include "RenderCore/VulkanCore/public/ShaderManager.hpp"
-#include "RenderCore/VulkanCore/public/SwapChain.hpp"
-#include "RenderCore/VulkanCore/public/VKResource.hpp"
+#include "Render/RenderCore/Resource/public/ResourceManager.hpp"
+#include "Render/RenderCore/VulkanCore/public/CommandPoolManager.hpp"
+#include "Render/RenderCore/VulkanCore/public/Descriptor.hpp"
+#include "Render/RenderCore/VulkanCore/public/Device.hpp"
+#include "Render/RenderCore/VulkanCore/public/Pipeline.hpp"
+#include "Render/RenderCore/VulkanCore/public/ShaderManager.hpp"
+#include "Render/RenderCore/VulkanCore/public/SwapChain.hpp"
+#include "Render/RenderCore/VulkanCore/public/VKResource.hpp"
 #include "UI/MainWindow.hpp"
 #include "UI/VulkanContainer.hpp"
 #include "UI/VulkanWindow.hpp"
@@ -590,6 +590,7 @@ int main(int argc, char *argv[])
     vkcore::Device::Config deviceConfig;
     deviceConfig.deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     deviceConfig.vulkan1_3_features = {"dynamicRendering"};
+    deviceConfig.vulkan1_0_features = {"samplerAnisotropy"}; // 启用各向异性过滤
     vkcore::Device device(vkInstance, surface, deviceConfig);
     std::cout << "使用设备: " << device.getPhysicalDevice().getProperties().deviceName << std::endl;
 

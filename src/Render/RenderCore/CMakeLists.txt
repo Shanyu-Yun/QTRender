@@ -30,6 +30,7 @@ target_include_directories(RenderCore PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/public
     ${CMAKE_CURRENT_SOURCE_DIR}/Camera/public
+    ${CMAKE_CURRENT_SOURCE_DIR}/RenderGraph/public
     ${CMAKE_CURRENT_SOURCE_DIR}/ResourceManager/public
     ${CMAKE_CURRENT_SOURCE_DIR}/Scene/public
     ${CMAKE_CURRENT_SOURCE_DIR}/VulkanCore/public
@@ -38,6 +39,7 @@ target_include_directories(RenderCore PUBLIC
 target_include_directories(RenderCore PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/private
     ${CMAKE_CURRENT_SOURCE_DIR}/Camera/private
+    ${CMAKE_CURRENT_SOURCE_DIR}/RenderGraph/private
     ${CMAKE_CURRENT_SOURCE_DIR}/ResourceManager/private
     ${CMAKE_CURRENT_SOURCE_DIR}/Scene/private
     ${CMAKE_CURRENT_SOURCE_DIR}/VulkanCore/private
@@ -56,12 +58,14 @@ target_link_libraries(RenderCore PUBLIC
 )
 
 # 添加子目录
-add_subdirectory(ResourceManager)
+add_subdirectory(RenderGraph)
+add_subdirectory(Resource)
 add_subdirectory(Scene)
 add_subdirectory(VulkanCore)
 
 # 链接子模块库
 target_link_libraries(RenderCore PUBLIC
+    RenderGraph
     RenderCore::ResourceManager
     RenderCore::Scene
     RenderCore::VulkanCore

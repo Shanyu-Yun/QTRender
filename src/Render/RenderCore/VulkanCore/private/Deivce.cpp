@@ -111,6 +111,29 @@ void Device::createlogicaldevice()
     // 准备设备特性
     vk::PhysicalDeviceFeatures deviceFeatures{};
 
+    // 根据 config 启用 Vulkan 1.0 特性
+    for (const auto &feature : m_config.vulkan1_0_features)
+    {
+        if (feature == "samplerAnisotropy")
+            deviceFeatures.samplerAnisotropy = VK_TRUE;
+        else if (feature == "geometryShader")
+            deviceFeatures.geometryShader = VK_TRUE;
+        else if (feature == "tessellationShader")
+            deviceFeatures.tessellationShader = VK_TRUE;
+        else if (feature == "fillModeNonSolid")
+            deviceFeatures.fillModeNonSolid = VK_TRUE;
+        else if (feature == "wideLines")
+            deviceFeatures.wideLines = VK_TRUE;
+        else if (feature == "largePoints")
+            deviceFeatures.largePoints = VK_TRUE;
+        else if (feature == "multiDrawIndirect")
+            deviceFeatures.multiDrawIndirect = VK_TRUE;
+        else if (feature == "drawIndirectFirstInstance")
+            deviceFeatures.drawIndirectFirstInstance = VK_TRUE;
+        else if (feature == "depthClamp")
+            deviceFeatures.depthClamp = VK_TRUE;
+    }
+
     // 准备 Vulkan 1.3 和 1.2 特性结构
     vk::PhysicalDeviceVulkan13Features features13{};
     vk::PhysicalDeviceVulkan12Features features12{};
@@ -201,6 +224,18 @@ bool Device::checkdeviceextensionsupport(vk::PhysicalDevice &device)
 bool Device::checkvulkanfeaturessupport(vk::PhysicalDevice &device)
 {
     auto property = device.getProperties();
+
+    // 检查 Vulkan 1.0 特性
+    if (!m_config.vulkan1_0_features.empty())
+    {
+        for (const auto &feature : m_config.vulkan1_0_features)
+        {
+            if (!checkspeficfeaturesupport(device, feature))
+            {
+                return false;
+            }
+        }
+    }
 
     if (!m_config.vulkan1_1_features.empty())
     {

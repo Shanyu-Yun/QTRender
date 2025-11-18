@@ -39,6 +39,7 @@ class Device
         std::vector<std::string> vulkan1_3_features;
         std::vector<std::string> vulkan1_2_features;
         std::vector<std::string> vulkan1_1_features;
+        std::vector<std::string> vulkan1_0_features;
     };
 
     /**

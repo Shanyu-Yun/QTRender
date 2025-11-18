@@ -44,7 +44,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 # 添加子目录
-add_subdirectory(RenderCore)
+add_subdirectory(Render)
 add_subdirectory(UI)
 
 # 创建主可执行文件
@@ -55,6 +55,7 @@ add_executable(${PROJECT_NAME}
 # 链接库
 target_link_libraries(${PROJECT_NAME}
     RenderCore
+    Renderer
     UI
     Qt6::Core
     Qt6::Widgets

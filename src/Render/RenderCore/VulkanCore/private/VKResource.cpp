@@ -8,7 +8,7 @@ GpuResource::GpuResource(std::string name, vk::Device device) : m_name(name), m_
 }
 
 Buffer::Buffer(std::string name, Device &device, VmaAllocator allocator, const BufferDesc &desc)
-    : GpuResource(name, device.get()), m_allocator(allocator), m_size(desc.size)
+    : GpuResource(name, device.get()), m_allocator(allocator), m_size(desc.size), m_usage(desc.usageFlags)
 {
     VkBufferCreateInfo bufferInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
     bufferInfo.size = desc.size;
@@ -112,8 +112,9 @@ void Buffer::release()
 }
 
 Image::Image(std::string name, Device &device, VmaAllocator allocator, const ImageDesc &desc)
-    : GpuResource("Unnamed Image", device.get()), m_allocator(allocator), m_format(desc.format), m_extent(desc.extent),
-      m_mipLevels(desc.mipLevels), m_currentLayout(vk::ImageLayout::eUndefined)
+    : GpuResource(name, device.get()), m_allocator(allocator), m_format(desc.format), m_extent(desc.extent),
+      m_mipLevels(desc.mipLevels), m_arrayLayers(desc.arrayLayers), m_usage(desc.usage),
+      m_currentLayout(vk::ImageLayout::eUndefined)
 {
     VkImageCreateInfo imageInfo = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
     imageInfo.imageType = static_cast<VkImageType>(desc.imageType);
@@ -194,6 +195,8 @@ void Image::release()
         m_format = vk::Format::eUndefined;
         m_extent = vk::Extent3D{1, 1, 1};
         m_mipLevels = 1;
+        m_arrayLayers = 1;
+        m_usage = vk::ImageUsageFlags();
         m_currentLayout = vk::ImageLayout::eUndefined;
     }
 }
