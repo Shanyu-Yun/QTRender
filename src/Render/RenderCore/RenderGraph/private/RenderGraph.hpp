@@ -6,16 +6,15 @@
 
 #pragma once
 
-#include "../public/RDGHandle.hpp"
-#include "../public/RDGPass.hpp"
-#include "../public/RDGResourceAccessor.hpp"
-#include "../public/RDGSyncInfo.hpp"
+#include "RDGHandle.hpp"
+#include "RDGPass.hpp"
 #include "RDGResource.hpp"
+#include "RDGResourceAccessor.hpp"
+#include "RDGSyncInfo.hpp"
 #include <array>
 #include <memory>
 #include <unordered_map>
 #include <vector>
-
 
 // 前向声明
 namespace vkcore

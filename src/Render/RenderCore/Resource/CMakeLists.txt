@@ -1,5 +1,4 @@
 # ResourceManager模块配置
-cmake_minimum_required(VERSION 3.20)
 
 # 创建ResourceManager静态库
 add_library(ResourceManager STATIC)
@@ -9,13 +8,6 @@ set_target_properties(ResourceManager PROPERTIES
     AUTOMOC OFF
     AUTOUIC OFF
     AUTORCC OFF
-)
-
-# 设置C++标准 [[memory:8770539]]
-set_target_properties(ResourceManager PROPERTIES
-    CXX_STANDARD 20
-    CXX_STANDARD_REQUIRED ON
-    CXX_EXTENSIONS OFF
 )
 
 # 收集源文件
@@ -36,7 +28,7 @@ target_sources(ResourceManager PRIVATE
 # 设置包含目录
 target_include_directories(ResourceManager PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/public
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../  # 添加项目根目录以访问其他模块
+    ${CMAKE_CURRENT_SOURCE_DIR}/..  # 添加 RenderCore 根目录以访问其他模块
 )
 
 target_include_directories(ResourceManager PRIVATE

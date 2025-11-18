@@ -1,9 +1,10 @@
-#include "../public/Scene.hpp"
-#include "../../Resource/public/ResourceType.hpp" // 包含Mesh和Material的具体定义
-#include "Camera.hpp"                             // Camera现在在同一模块中
-#include "Light.hpp"                              // 包含Light类
+#include "Scene.hpp"
+#include "Camera.hpp"                       // Camera现在在同一模块中
+#include "Light.hpp"                        // 包含Light类
+#include "Resource/public/ResourceType.hpp" // 包含Mesh和Material的具体定义
 #include <algorithm>
 #include <iostream>
+
 
 namespace rendercore
 {

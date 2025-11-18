@@ -1,4 +1,4 @@
-#include "../public/Light.hpp"
+#include "Light.hpp"
 #include <algorithm>
 #include <cmath>
 #include <glm/gtc/matrix_transform.hpp>

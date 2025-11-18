@@ -1,15 +1,7 @@
 # Renderer库配置
-cmake_minimum_required(VERSION 3.20)
 
 # 创建Renderer静态库
 add_library(Renderer STATIC)
-
-# 设置C++标准
-set_target_properties(Renderer PROPERTIES
-    CXX_STANDARD 20
-    CXX_STANDARD_REQUIRED ON
-    CXX_EXTENSIONS OFF
-)
 
 # 收集所有源文件
 file(GLOB_RECURSE RENDERER_HEADERS
@@ -44,11 +36,6 @@ target_link_libraries(Renderer PUBLIC
 # 设置编译定义
 target_compile_definitions(Renderer PRIVATE
     RENDERER_EXPORTS
-)
-
-# 设置输出目录
-set_target_properties(Renderer PROPERTIES
-    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
 )
 
 # 安装规则

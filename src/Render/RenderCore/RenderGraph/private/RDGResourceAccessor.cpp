@@ -3,10 +3,9 @@
  * @brief RDGResourceAccessor 实现
  */
 
-#include "../public/RDGResourceAccessor.hpp"
-#include "../../VulkanCore/public/VKResource.hpp"
-#include "../private/RenderGraph.hpp"
-
+#include "RDGResourceAccessor.hpp"
+#include "RenderGraph.hpp"
+#include "VulkanCore/public/VKResource.hpp"
 
 namespace rendercore
 {

@@ -1,4 +1,4 @@
-#include "../public/Device.hpp"
+#include "Device.hpp"
 #include <set>
 
 /**

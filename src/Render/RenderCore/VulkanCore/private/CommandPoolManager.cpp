@@ -1,4 +1,4 @@
-#include "../public/CommandPoolManager.hpp"
+#include "CommandPoolManager.hpp"
 #include <cassert>
 #include <cstdio>
 #include <stdexcept>

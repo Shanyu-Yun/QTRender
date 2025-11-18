@@ -1,7 +1,7 @@
 #include "ResourceManager.hpp"
-#include "RenderCore/VulkanCore/public/CommandPoolManager.hpp"
-#include "RenderCore/VulkanCore/public/Descriptor.hpp"
-#include "RenderCore/VulkanCore/public/ShaderManager.hpp"
+#include "VulkanCore/public/CommandPoolManager.hpp"
+#include "VulkanCore/public/Descriptor.hpp"
+#include "VulkanCore/public/ShaderManager.hpp"
 #include <functional>
 #include <iostream>
 #include <stb_image.h>

@@ -1,40 +1,3 @@
-cmake_minimum_required(VERSION 3.20)
-
-# 设置项目名称和版本
-project(Render VERSION 1.0.0 LANGUAGES CXX)
-
-# 设置C++标准 [[memory:8770539]]
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
-# 设置vcpkg工具链
-if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-    set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
-endif()
-
-# 设置Qt6路径
-set(CMAKE_PREFIX_PATH "C:/Qt/6.9.2/msvc2022_64" ${CMAKE_PREFIX_PATH})
-
-# 设置构建类型
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release)
-endif()
-
-# 设置输出目录
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-
-# 设置编译选项
-if(MSVC)
-    add_compile_options(/W4 /permissive-)
-    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
-else()
-    add_compile_options(-Wall -Wextra -Wpedantic)
-endif()
-
-
 # 查找必要的包
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
 
@@ -66,26 +29,29 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}
 )
 
-# 设置目标属性
-set_target_properties(${PROJECT_NAME} PROPERTIES
-    CXX_STANDARD 20
-    CXX_STANDARD_REQUIRED ON
-    CXX_EXTENSIONS OFF
-)
-
-# 自动复制Qt6 DLL到输出目录
+# 使用 windeployqt 自动部署 Qt 依赖
 if(WIN32)
-    set(QT_BIN_DIR "C:/Qt/6.9.2/msvc2022_64/bin")
-    
-    # 根据当前配置（Debug/Release）复制对应的 Qt DLL（使用 generator expressions 选择带 d 后缀的 Debug 版）
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E echo "正在复制 Qt6 DLL..."
-        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${QT_BIN_DIR}/$<IF:$<CONFIG:Debug>,Qt6Cored.dll,Qt6Core.dll>" "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${QT_BIN_DIR}/$<IF:$<CONFIG:Debug>,Qt6Guid.dll,Qt6Gui.dll>" "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${QT_BIN_DIR}/$<IF:$<CONFIG:Debug>,Qt6Widgetsd.dll,Qt6Widgets.dll>" "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
-        COMMENT "复制Qt6 DLL到输出目录"
-    )
+    # 查找 windeployqt 工具 (通常在 qmake 同级目录)
+    if(TARGET Qt6::qmake)
+        get_target_property(_qmake_executable Qt6::qmake IMPORTED_LOCATION)
+        get_filename_component(_qt_bin_dir "${_qmake_executable}" DIRECTORY)
+        find_program(WINDEPLOYQT_EXECUTABLE windeployqt HINTS "${_qt_bin_dir}")
+    endif()
+
+    if(WINDEPLOYQT_EXECUTABLE)
+        # 添加构建后步骤
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND "${WINDEPLOYQT_EXECUTABLE}" 
+                --verbose 0
+                --no-translations
+                --no-opengl-sw
+                --no-compiler-runtime
+                "$<TARGET_FILE:${PROJECT_NAME}>"
+            COMMENT "正在运行 windeployqt 部署 Qt 依赖..."
+        )
+    else()
+        message(WARNING "未找到 windeployqt，请确保 Qt 环境配置正确。")
+    endif()
 endif()
 
 # 安装规则

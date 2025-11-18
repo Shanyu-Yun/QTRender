@@ -3,7 +3,7 @@
  * @brief RDGPass类的实现
  */
 
-#include "../public/RDGPass.hpp"
+#include "RDGPass.hpp"
 #include <stdexcept>
 
 namespace rendercore

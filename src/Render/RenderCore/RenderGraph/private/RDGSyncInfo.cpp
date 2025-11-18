@@ -3,7 +3,7 @@
  * @brief RDGFrameSyncManager 实现
  */
 
-#include "../public/RDGSyncInfo.hpp"
+#include "RDGSyncInfo.hpp"
 #include <stdexcept>
 
 namespace rendercore

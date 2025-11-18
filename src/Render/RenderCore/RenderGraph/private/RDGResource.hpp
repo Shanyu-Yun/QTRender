@@ -6,12 +6,11 @@
 
 #pragma once
 
-#include "../../VulkanCore/public/VKResource.hpp"
-#include "../public/RDGHandle.hpp"
+#include "RDGHandle.hpp"
+#include "VulkanCore/public/VKResource.hpp"
 #include <memory>
 #include <string>
 #include <vector>
-
 
 namespace rendercore
 {

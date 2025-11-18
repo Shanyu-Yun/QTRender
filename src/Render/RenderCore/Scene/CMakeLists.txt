@@ -1,5 +1,4 @@
 # Scene模块配置
-cmake_minimum_required(VERSION 3.20)
 
 # 创建Scene静态库（实际目标名不使用 ::，后面创建一个 ALIAS）
 add_library(Scene STATIC)
@@ -9,13 +8,6 @@ set_target_properties(Scene PROPERTIES
     AUTOMOC OFF
     AUTOUIC OFF
     AUTORCC OFF
-)
-
-# 设置C++标准 [[memory:8770539]]
-set_target_properties(Scene PROPERTIES
-    CXX_STANDARD 20
-    CXX_STANDARD_REQUIRED ON
-    CXX_EXTENSIONS OFF
 )
 
 # 收集源文件
@@ -37,6 +29,7 @@ target_sources(Scene PRIVATE
 # 设置包含目录
 target_include_directories(Scene PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/public
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
 
 target_include_directories(Scene PRIVATE

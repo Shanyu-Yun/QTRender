@@ -1,8 +1,8 @@
 #pragma once
 
-#include "RenderCore/VulkanCore/public/Descriptor.hpp"    // 包含 vkcore::Descriptor...
-#include "RenderCore/VulkanCore/public/ShaderManager.hpp" // 包含 vkcore::ShaderModule
-#include "RenderCore/VulkanCore/public/VKResource.hpp"    // 包含 vkcore::Buffer 和 vkcore::Image
+#include "VulkanCore/public/Descriptor.hpp"    // 包含 vkcore::Descriptor...
+#include "VulkanCore/public/ShaderManager.hpp" // 包含 vkcore::ShaderModule
+#include "VulkanCore/public/VKResource.hpp"    // 包含 vkcore::Buffer 和 vkcore::Image
 #include <glm/glm.hpp>
 #include <memory>
 #include <string>

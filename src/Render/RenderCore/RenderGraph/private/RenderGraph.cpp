@@ -4,10 +4,10 @@
  */
 
 #include "RenderGraph.hpp"
-#include "../../VulkanCore/public/CommandPoolManager.hpp"
-#include "../../VulkanCore/public/Device.hpp"
-#include "../../VulkanCore/public/SwapChain.hpp"
-#include "../../VulkanCore/public/VKResource.hpp"
+#include "VulkanCore/public/CommandPoolManager.hpp"
+#include "VulkanCore/public/Device.hpp"
+#include "VulkanCore/public/SwapChain.hpp"
+#include "VulkanCore/public/VKResource.hpp"
 #include <algorithm>
 #include <iostream>
 #include <stdexcept>

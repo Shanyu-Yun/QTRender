@@ -91,5 +91,5 @@
         "coroutine": "cpp",
         "resumable": "cpp"
     },
-    "cmake.sourceDirectory": "E:/Github_repo/QTRender/src"
+    "cmake.sourceDirectory": "${workspaceFolder}"
 }
